@@ -14,23 +14,40 @@
 #define ADE_SAMPLE_INTERVAL_MS 1000U /**< Normal electrical sample period. */
 #define ADE_RETRY_INTERVAL_MS 2000U /**< Delay between offline retries. */
 
-/*
- * Voltage conversion recovered from the previous working firmware. It turns
- * AVRMS/BVRMS register counts into approximate volts for immediate bring-up.
- * These are board-specific legacy values, not universal ADE7880 constants.
- */
-#define LEGACY_VOLTAGE_SCALE_V_PER_COUNT 0.00055963F
-#define LEGACY_PHASE_A_CORRECTION 1.017F
-/*
- * The old firmware exported current in 0.01 A and power in 0.1 W units.
- * Convert those legacy fixed-point coefficients to true SI units here.
- */
-#define LEGACY_CURRENT_SCALE_A_PER_COUNT (0.00036565F / 100.0F)
-#define LEGACY_POWER_SCALE_W_PER_COUNT (0.0170276F / 10.0F)
-#define LEGACY_PHASE_A_POWER_CORRECTION 1.02F
-
 /** Public live state; inspect this symbol in the debugger Watch window. */
 volatile App_ElectricalState g_app_electrical;
+
+/*
+ * Board startup calibration, written explicitly for easy review and editing.
+ * Each entry is {scale, offset} for engineering = raw * scale + offset.
+ * Phase-C values currently copy phase B, and neutral current copies the phase
+ * current scale, because measured coefficients were not available. These
+ * provisional defaults make every channel usable for commissioning, but every
+ * populated channel must still be verified and calibrated on its actual board.
+ */
+static const ADE7880_Calibration default_calibration = {
+    .voltage = {
+        [ADE7880_PHASE_A] = {0.00055963F * 1.017F, 0.0F},
+        [ADE7880_PHASE_B] = {0.00055963F,          0.0F},
+        [ADE7880_PHASE_C] = {0.00055963F,          0.0F}
+    },
+    .current = {
+        [ADE7880_PHASE_A] = {0.00036565F / 100.0F, 0.0F},
+        [ADE7880_PHASE_B] = {0.00036565F / 100.0F, 0.0F},
+        [ADE7880_PHASE_C] = {0.00036565F / 100.0F, 0.0F}
+    },
+    .active_power = {
+        [ADE7880_PHASE_A] = {(0.0170276F / 10.0F) * 1.02F, 0.0F},
+        [ADE7880_PHASE_B] = { 0.0170276F / 10.0F,          0.0F},
+        [ADE7880_PHASE_C] = { 0.0170276F / 10.0F,          0.0F}
+    },
+    .apparent_power = {
+        [ADE7880_PHASE_A] = {(0.0170276F / 10.0F) * 1.02F, 0.0F},
+        [ADE7880_PHASE_B] = { 0.0170276F / 10.0F,          0.0F},
+        [ADE7880_PHASE_C] = { 0.0170276F / 10.0F,          0.0F}
+    },
+    .neutral_current = {0.00036565F / 100.0F, 0.0F}
+};
 
 static ADE7880_Device ade_device; /**< Portable driver instance for this IC. */
 static SPI_HandleTypeDef *ade_spi_handle; /**< SPI2 handle supplied by main.c. */
@@ -62,53 +79,30 @@ static void update_display_values(void)
     }
 }
 
-/** Load the A/B scales recovered from the previous firmware for this board. */
-static void load_legacy_calibration(void)
+/** Restore one complete, symmetric A/B/C calibration set. */
+void App_ResetCalibrationToDefaults(void)
 {
-    measurement_calibration.voltage[ADE7880_PHASE_A].scale =
-        LEGACY_VOLTAGE_SCALE_V_PER_COUNT * LEGACY_PHASE_A_CORRECTION;
-    measurement_calibration.voltage[ADE7880_PHASE_A].offset = 0.0F;
-    phase_conversion_enabled[APP_PHASE_QUANTITY_VOLTAGE_RMS]
-                            [ADE7880_PHASE_A] = true;
-    g_app_electrical.voltage_source[ADE7880_PHASE_A] =
-        APP_CALIBRATION_LEGACY;
+    measurement_calibration = default_calibration;
+    neutral_current_conversion_enabled = true;
+    g_app_electrical.neutral_current_valid = false;
+    g_app_electrical.neutral_current_source = APP_CALIBRATION_DEFAULT;
 
-    measurement_calibration.voltage[ADE7880_PHASE_B].scale =
-        LEGACY_VOLTAGE_SCALE_V_PER_COUNT;
-    measurement_calibration.voltage[ADE7880_PHASE_B].offset = 0.0F;
-    phase_conversion_enabled[APP_PHASE_QUANTITY_VOLTAGE_RMS]
-                            [ADE7880_PHASE_B] = true;
-    g_app_electrical.voltage_source[ADE7880_PHASE_B] =
-        APP_CALIBRATION_LEGACY;
-
-    for (uint32_t phase = ADE7880_PHASE_A; phase <= ADE7880_PHASE_B; ++phase) {
-        measurement_calibration.current[phase].scale =
-            LEGACY_CURRENT_SCALE_A_PER_COUNT;
-        measurement_calibration.current[phase].offset = 0.0F;
-        phase_conversion_enabled[APP_PHASE_QUANTITY_CURRENT_RMS][phase] = true;
-        g_app_electrical.current_source[phase] = APP_CALIBRATION_LEGACY;
-
-        measurement_calibration.active_power[phase].scale =
-            LEGACY_POWER_SCALE_W_PER_COUNT;
-        measurement_calibration.active_power[phase].offset = 0.0F;
-        phase_conversion_enabled[APP_PHASE_QUANTITY_ACTIVE_POWER][phase] = true;
-        g_app_electrical.active_power_source[phase] = APP_CALIBRATION_LEGACY;
-
-        /* ADE7880 active/apparent powers are gain matched on each phase. */
-        measurement_calibration.apparent_power[phase] =
-            measurement_calibration.active_power[phase];
-        phase_conversion_enabled[APP_PHASE_QUANTITY_APPARENT_POWER][phase] =
-            true;
+    for (uint32_t phase = 0U; phase < ADE7880_PHASE_COUNT; ++phase) {
+        for (uint32_t quantity = 0U;
+             quantity < (uint32_t)APP_PHASE_QUANTITY_COUNT; ++quantity) {
+            phase_conversion_enabled[quantity][phase] = true;
+        }
+        g_app_electrical.voltage_valid[phase] = false;
+        g_app_electrical.current_valid[phase] = false;
+        g_app_electrical.active_power_valid[phase] = false;
+        g_app_electrical.apparent_power_valid[phase] = false;
+        g_app_electrical.voltage_source[phase] = APP_CALIBRATION_DEFAULT;
+        g_app_electrical.current_source[phase] = APP_CALIBRATION_DEFAULT;
+        g_app_electrical.active_power_source[phase] = APP_CALIBRATION_DEFAULT;
         g_app_electrical.apparent_power_source[phase] =
-            APP_CALIBRATION_DERIVED;
+            APP_CALIBRATION_DEFAULT;
     }
-
-    measurement_calibration.active_power[ADE7880_PHASE_A].scale *=
-        LEGACY_PHASE_A_POWER_CORRECTION;
-    measurement_calibration.apparent_power[ADE7880_PHASE_A].scale *=
-        LEGACY_PHASE_A_POWER_CORRECTION;
-
-    /* Phase C and neutral had no old conversion, so their sources stay NONE. */
+    update_display_values();
 }
 
 /** Publish one calibrated field or explicitly mark it unavailable. */
@@ -276,7 +270,7 @@ static void initialize_ade(void)
                               : ADE_RETRY_INTERVAL_MS);
 }
 
-/** Initialize application state, legacy voltage scaling, LEDs, and ADE7880. */
+/** Initialize application state, default three-phase scaling, LEDs, and ADE7880. */
 void App_Init(SPI_HandleTypeDef *ade_spi)
 {
     DiagnosticLed_Init();
@@ -292,7 +286,7 @@ void App_Init(SPI_HandleTypeDef *ade_spi)
         g_app_electrical.current_polarity[phase] =
             APP_CURRENT_POLARITY_NORMAL;
     }
-    load_legacy_calibration();
+    App_ResetCalibrationToDefaults();
     ade_spi_handle = ade_spi;
 
     if (ade_spi_handle == NULL) {
@@ -464,6 +458,26 @@ ADE7880_Status App_SetNeutralCurrentCalibration(
     g_app_electrical.neutral_current_valid = false;
     g_app_electrical.neutral_current_source = APP_CALIBRATION_USER;
     return ADE7880_STATUS_OK;
+}
+
+/** Fit and install one neutral-current conversion from multiple points. */
+ADE7880_Status App_CalibrateNeutralCurrentMultiPoint(
+    const ADE7880_CalibrationPoint *points, size_t point_count,
+    ADE7880_LinearCalibration *calibration_result,
+    float *max_abs_error)
+{
+    ADE7880_LinearCalibration calibration;
+    ADE7880_Status status = ADE7880_CalculateLinearCalibrationMultiPoint(
+        points, point_count, &calibration, max_abs_error);
+
+    if (status != ADE7880_STATUS_OK) {
+        return status;
+    }
+    status = App_SetNeutralCurrentCalibration(&calibration);
+    if ((status == ADE7880_STATUS_OK) && (calibration_result != NULL)) {
+        *calibration_result = calibration;
+    }
+    return status;
 }
 
 /** Configure a persistent runtime correction for a reversed phase CT. */

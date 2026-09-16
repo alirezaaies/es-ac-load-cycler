@@ -32,8 +32,7 @@ extern "C" {
 /** Identifies where an engineering-unit conversion coefficient came from. */
 typedef enum {
     APP_CALIBRATION_NONE = 0, /**< No conversion; inspect raw counts. */
-    APP_CALIBRATION_LEGACY,   /**< Directly recovered from previous firmware. */
-    APP_CALIBRATION_DERIVED,  /**< Derived from a documented matched quantity. */
+    APP_CALIBRATION_DEFAULT,  /**< Startup coefficient; verify on each board. */
     APP_CALIBRATION_USER      /**< Replaced with measured board values. */
 } App_CalibrationSource;
 
@@ -118,6 +117,15 @@ void App_Init(SPI_HandleTypeDef *ade_spi);
 void App_Process(void);
 
 /**
+ * @brief Restore every phase and neutral-current startup calibration.
+ *
+ * The editable default table is `default_calibration` in Application/Src/app.c.
+ * Calling this function discards runtime USER coefficients. New values appear
+ * after the next successful sample.
+ */
+void App_ResetCalibrationToDefaults(void);
+
+/**
  * @brief Replace one phase's voltage scale with a measured calibration.
  * @param phase Phase whose AVRMS/BVRMS/CVRMS value is being calibrated.
  * @param calibration Scale and offset, normally calculated from two points.
@@ -137,7 +145,7 @@ ADE7880_Status App_SetVoltageCalibration(
     ADE7880_Phase phase, const ADE7880_LinearCalibration *calibration);
 
 /**
- * @brief Install a two-point calibration for one phase measurement.
+ * @brief Install one scale/offset pair for one phase measurement.
  * @param quantity Voltage, current, active power, or apparent power.
  * @param phase Phase A, B, or C associated with the raw register.
  * @param calibration Scale and offset calculated from reference measurements.
@@ -200,6 +208,19 @@ ADE7880_Status App_CalibratePhaseMultiPoint(
  */
 ADE7880_Status App_SetNeutralCurrentCalibration(
     const ADE7880_LinearCalibration *calibration);
+
+/**
+ * @brief Fit and install neutral-current calibration from two or more points.
+ * @param points Averaged NIRMS raw counts paired with reference amperes.
+ * @param point_count Number of pairs; three to five are recommended.
+ * @param calibration_result Optional installed scale/offset for saving later.
+ * @param max_abs_error Optional worst residual in amperes.
+ * @return ADE7880_STATUS_OK or ADE7880_STATUS_INVALID_ARGUMENT.
+ */
+ADE7880_Status App_CalibrateNeutralCurrentMultiPoint(
+    const ADE7880_CalibrationPoint *points, size_t point_count,
+    ADE7880_LinearCalibration *calibration_result,
+    float *max_abs_error);
 
 /**
  * @brief Configure software compensation for one phase's CT direction.

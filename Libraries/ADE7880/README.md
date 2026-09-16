@@ -65,7 +65,7 @@ window:
 - `online`: the IC initialized and the latest complete read succeeded.
 - `raw.phase[n]`: direct register values for phase A, B, or C.
 - `voltage_v[n]`: converted RMS voltage when `voltage_valid[n]` is true.
-- `voltage_source[n]`: NONE, LEGACY, DERIVED, or USER calibration origin.
+- `voltage_source[n]`: NONE, DEFAULT, or USER calibration origin.
 - `current_a[n]`: RMS amperes when `current_valid[n]` is true.
 - `current_display[n]`: current in the selected display unit; default is 0.01 A.
 - `current_source[n]`: origin of the current conversion coefficient.
@@ -82,13 +82,9 @@ window:
 - `last_status`: the exact result of the latest driver operation.
 
 Array index `0`, `1`, or `2` always represents phase A, B, or C. Power factor
-uses the ADE7880 register's fixed signed Q1.15 format and therefore appears
-without board calibration. Current and power registers are raw DSP counts;
-their engineering values intentionally remain zero with a false valid flag
-until a measured calibration is installed.
-
-The application loads the following coefficients recovered from the previous
-firmware for phases A and B:
+uses the ADE7880 register's fixed signed Q1.15 format and therefore needs no
+linear scale/offset conversion. Every other listed channel starts with an
+explicit provisional coefficient in `default_calibration` in `app.c`:
 
 - Voltage: `0.00055963 V/count`; phase A also uses correction `1.017`.
 - Current: old coefficient `0.00036565` produced 0.01 A units, so the
@@ -97,12 +93,44 @@ firmware for phases A and B:
   provisional SI scale is `0.00170276 W/count`; phase A also uses correction
   `1.02`.
 
-The ADE7880 internally gain-matches active and apparent power on each phase,
-so the matching legacy power coefficient is also used provisionally for VA and
-is explicitly marked `APP_CALIBRATION_DERIVED`. Directly recovered values are
-marked `APP_CALIBRATION_LEGACY`. Replace every provisional value with measured
-two-point calibration before accuracy-dependent use. Phase C and neutral
-current remain invalid until explicit calibrations are supplied.
+The same current coefficient is initially used for phases A/B/C and neutral.
+Phase C voltage and power initially copy phase B because no measured phase-C
+data was available. Active and apparent power have explicit entries but begin
+with equal scales because those paths are gain matched in the ADE7880. All
+startup entries are marked `APP_CALIBRATION_DEFAULT`; a runtime replacement is
+marked `APP_CALIBRATION_USER`.
+
+This fallback makes every channel immediately available for commissioning. A
+true valid flag means conversion ran successfully; it does not certify that a
+fallback coefficient is accurate for the connected divider, CT, burden, or
+PCB tolerances. Verify and calibrate each populated channel before using it for
+protection, billing, or safety decisions.
+
+## Editing and restoring startup coefficients
+
+All board defaults are together near the top of `Application/Src/app.c`:
+
+```c
+static const ADE7880_Calibration default_calibration = {
+    .voltage = {
+        [ADE7880_PHASE_A] = {phase_a_scale, phase_a_offset},
+        [ADE7880_PHASE_B] = {phase_b_scale, phase_b_offset},
+        [ADE7880_PHASE_C] = {phase_c_scale, phase_c_offset}
+    },
+    /* current, active_power, apparent_power, and neutral_current follow. */
+};
+```
+
+Each `{scale, offset}` always means:
+
+```text
+engineering value = raw register count * scale + offset
+```
+
+`App_Init()` automatically loads the complete table. A USER calibration
+overrides only its selected quantity and phase in RAM. Call
+`App_ResetCalibrationToDefaults()` to discard all runtime overrides and restore
+the full A/B/C/neutral table. A hardware reset also restores the table.
 
 ## SI values and configurable display units
 
@@ -164,6 +192,28 @@ After validation at independent points, save the returned scale/offset in code
 or nonvolatile memory and reinstall it with `App_SetPhaseCalibration()` after
 every reset. A lamp's printed wattage is only nominal; use a reference meter or
 accurate source.
+
+Neutral current follows the same workflow with its dedicated convenience API:
+
+```c
+const ADE7880_CalibrationPoint neutral_points[] = {
+    {raw_neutral_at_0_10_a, 0.10F},
+    {raw_neutral_at_1_00_a, 1.00F},
+    {raw_neutral_at_5_00_a, 5.00F}
+};
+ADE7880_LinearCalibration neutral_result;
+
+(void)App_CalibrateNeutralCurrentMultiPoint(
+    neutral_points,
+    sizeof(neutral_points) / sizeof(neutral_points[0]),
+    &neutral_result,
+    NULL);
+```
+
+The phase selector makes single-phase and multi-phase use identical. A
+single-phase product may use only `ADE7880_PHASE_A`; two independent channels
+may use A and B; a three-phase product uses A/B/C. Calibrating one phase never
+changes another phase.
 
 Analog Devices recommends gain calibration for every meter. CT phase
 calibration is often needed, especially at low power factor, and offset
