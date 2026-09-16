@@ -66,12 +66,50 @@ window:
 - `raw.phase[n]`: direct register values for phase A, B, or C.
 - `voltage_v[n]`: converted RMS voltage when `voltage_valid[n]` is true.
 - `voltage_source[n]`: NONE, LEGACY, or USER calibration origin.
+- `current_a[n]`: RMS amperes when `current_valid[n]` is true.
+- `active_power_w[n]`: active watts when `active_power_valid[n]` is true.
+- `apparent_power_va[n]`: apparent VA when `apparent_power_valid[n]` is true.
+- `power_factor[n]`: signed PF from -1 to +1 after `power_factor_valid[n]` is true.
+- `neutral_current_a`: neutral RMS amperes when its valid flag is true.
 - `last_status`: the exact result of the latest driver operation.
+
+Array index `0`, `1`, or `2` always represents phase A, B, or C. Power factor
+uses the ADE7880 register's fixed signed Q1.15 format and therefore appears
+without board calibration. Current and power registers are raw DSP counts;
+their engineering values intentionally remain zero with a false valid flag
+until a measured calibration is installed.
 
 The application loads recovered legacy voltage scales for phases A and B so a
 connected board can show an approximate voltage immediately. Replace them with
 `App_SetVoltageCalibration()` after measuring two reference points. Phase C
 remains invalid until an explicit calibration is supplied.
+
+## Calibrating current and power for the Watch window
+
+Record the raw value and a simultaneous trusted reference reading at two
+stable, separated, nonzero operating points. Calculate and install one pair
+for each phase and quantity:
+
+```c
+ADE7880_LinearCalibration phase_a_current;
+
+if (ADE7880_CalculateLinearCalibration(
+        raw_at_1_a, 1.0F,
+        raw_at_5_a, 5.0F,
+        &phase_a_current) == ADE7880_STATUS_OK) {
+    (void)App_SetPhaseCalibration(APP_PHASE_QUANTITY_CURRENT_RMS,
+                                  ADE7880_PHASE_A,
+                                  &phase_a_current);
+}
+```
+
+Use the same sequence with `APP_PHASE_QUANTITY_ACTIVE_POWER` and reference
+watts, or `APP_PHASE_QUANTITY_APPARENT_POWER` and reference VA. Neutral current
+uses `App_SetNeutralCurrentCalibration()`. The values become valid on the next
+complete one-second sample. These RAM calibrations are lost at reset; after the
+coefficients are verified, load them during `App_Init()` or from nonvolatile
+memory. A lamp's printed wattage is only a nominal rating and is not a suitable
+accuracy reference.
 
 ## Status handling
 
@@ -82,4 +120,3 @@ Always check returned status values:
 - `ADE7880_STATUS_BUS_ERROR`: the platform SPI driver failed.
 - `ADE7880_STATUS_TIMEOUT`: SPI or reset did not finish in time.
 - `ADE7880_STATUS_VERIFY_FAILED`: a written register read back differently.
-
