@@ -147,6 +147,7 @@
 - بازیابی اتصال از فایل پشتیبان پروژه و سه منبع مستقل: `PB12=CS`، `PB13=SCK`، `PB14=MISO` و `PB15=MOSI`.
 - تأیید تنظیم قدیمی و دیتاشیتی SPI2: master، 8-bit، MSB-first، CPOL بالا، CPHA لبه دوم، prescaler 64 و نرخ 562.5 kbit/s.
 - ثبت SPI2 و پایه‌ها در `STM32F107.ioc` و همگام‌سازی `main.c` و MSP با خروجی مورد انتظار CubeMX.
+- ثبت صریح `CLKPolarity=High` در `.ioc` تا تولید مجدد CubeMX حالت SPI صحیح را حفظ کند.
 - بازنویسی `Libraries/ADE7880` بدون وابستگی به STM32 HAL و با callbackهای انتقال، CS و delay.
 - افزودن وضعیت صریح خطا، timeout سراسری reset، verify نوشتن‌ها، سه پالس انتخاب SPI و کنترل `RSTDONE`.
 - اصلاح خواندن PF با رجیسترهای مستقل `APF/BPF/CPF` به‌جای مسیر هارمونیک نامطمئن قدیمی.
