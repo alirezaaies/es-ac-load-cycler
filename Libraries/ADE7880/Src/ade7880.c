@@ -156,8 +156,6 @@ ADE7880_Status ADE7880_WriteRegisterVerified(ADE7880_Device *device,
 
 ADE7880_Status ADE7880_SelectSpi(ADE7880_Device *device)
 {
-    ADE7880_Status status;
-
     if (!valid_device(device)) {
         return ADE7880_STATUS_INVALID_ARGUMENT;
     }
@@ -173,10 +171,6 @@ ADE7880_Status ADE7880_SelectSpi(ADE7880_Device *device)
     device->transport.delay_ms(device->transport.context, 1U);
 
     /* Any CONFIG2 write locks the already selected SPI port. */
-    status = ADE7880_WriteRegister(device, ADE7880_REG_CONFIG2, 1U, 0U);
-    if (status != ADE7880_STATUS_OK) {
-        return status;
-    }
     return ADE7880_WriteRegisterVerified(device, ADE7880_REG_CONFIG2, 1U, 0U);
 }
 
