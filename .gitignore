@@ -16,3 +16,4 @@ MDK-ARM/STM32F107/
 MDK-ARM/*.lst
 MDK-ARM/*.uvguix.*
 MDK-ARM/JLinkLog.txt
+MDK-ARM/*.log
