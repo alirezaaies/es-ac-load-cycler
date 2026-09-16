@@ -65,10 +65,13 @@ window:
 - `online`: the IC initialized and the latest complete read succeeded.
 - `raw.phase[n]`: direct register values for phase A, B, or C.
 - `voltage_v[n]`: converted RMS voltage when `voltage_valid[n]` is true.
-- `voltage_source[n]`: NONE, LEGACY, or USER calibration origin.
+- `voltage_source[n]`: NONE, LEGACY, DERIVED, or USER calibration origin.
 - `current_a[n]`: RMS amperes when `current_valid[n]` is true.
+- `current_source[n]`: origin of the current conversion coefficient.
 - `active_power_w[n]`: active watts when `active_power_valid[n]` is true.
+- `active_power_source[n]`: origin of the active-power coefficient.
 - `apparent_power_va[n]`: apparent VA when `apparent_power_valid[n]` is true.
+- `apparent_power_source[n]`: origin of the apparent-power coefficient.
 - `power_factor[n]`: signed PF from -1 to +1 after `power_factor_valid[n]` is true.
 - `neutral_current_a`: neutral RMS amperes when its valid flag is true.
 - `last_status`: the exact result of the latest driver operation.
@@ -79,10 +82,19 @@ without board calibration. Current and power registers are raw DSP counts;
 their engineering values intentionally remain zero with a false valid flag
 until a measured calibration is installed.
 
-The application loads recovered legacy voltage scales for phases A and B so a
-connected board can show an approximate voltage immediately. Replace them with
-`App_SetVoltageCalibration()` after measuring two reference points. Phase C
-remains invalid until an explicit calibration is supplied.
+The application loads the following coefficients recovered from the previous
+firmware for phases A and B:
+
+- Voltage: `0.00055963 V/count`; phase A also uses correction `1.017`.
+- Current: `0.00036565 A/count`.
+- Active power: `0.0170276 W/count`; phase A also uses correction `1.02`.
+
+The ADE7880 internally gain-matches active and apparent power on each phase,
+so the matching legacy power coefficient is also used provisionally for VA and
+is explicitly marked `APP_CALIBRATION_DERIVED`. Directly recovered values are
+marked `APP_CALIBRATION_LEGACY`. Replace every provisional value with measured
+two-point calibration before accuracy-dependent use. Phase C and neutral
+current remain invalid until explicit calibrations are supplied.
 
 ## Calibrating current and power for the Watch window
 
