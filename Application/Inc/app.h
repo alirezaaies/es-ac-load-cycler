@@ -18,12 +18,13 @@
 extern "C" {
 #endif
 
-/** Identifies where each voltage conversion coefficient came from. */
+/** Identifies where an engineering-unit conversion coefficient came from. */
 typedef enum {
-    APP_VOLTAGE_CALIBRATION_NONE = 0, /**< No conversion; inspect raw counts. */
-    APP_VOLTAGE_CALIBRATION_LEGACY,   /**< Recovered from the previous firmware. */
-    APP_VOLTAGE_CALIBRATION_USER      /**< Replaced with measured board values. */
-} App_VoltageCalibrationSource;
+    APP_CALIBRATION_NONE = 0, /**< No conversion; inspect raw counts. */
+    APP_CALIBRATION_LEGACY,   /**< Directly recovered from previous firmware. */
+    APP_CALIBRATION_DERIVED,  /**< Derived from a documented matched quantity. */
+    APP_CALIBRATION_USER      /**< Replaced with measured board values. */
+} App_CalibrationSource;
 
 /** Selects one phase quantity for the generic calibration function. */
 typedef enum {
@@ -51,17 +52,21 @@ typedef struct {
     ADE7880_MeasurementsRaw raw; /**< Uncalibrated values direct from the IC. */
     float voltage_v[ADE7880_PHASE_COUNT]; /**< RMS voltage in volts when valid. */
     bool voltage_valid[ADE7880_PHASE_COUNT]; /**< True when voltage_v is usable. */
-    App_VoltageCalibrationSource voltage_source[ADE7880_PHASE_COUNT];
+    App_CalibrationSource voltage_source[ADE7880_PHASE_COUNT];
     float current_a[ADE7880_PHASE_COUNT]; /**< RMS current in amperes when valid. */
     bool current_valid[ADE7880_PHASE_COUNT]; /**< True after current calibration. */
+    App_CalibrationSource current_source[ADE7880_PHASE_COUNT];
     float active_power_w[ADE7880_PHASE_COUNT]; /**< Active power in watts. */
     bool active_power_valid[ADE7880_PHASE_COUNT]; /**< True after watt calibration. */
+    App_CalibrationSource active_power_source[ADE7880_PHASE_COUNT];
     float apparent_power_va[ADE7880_PHASE_COUNT]; /**< Apparent power in VA. */
     bool apparent_power_valid[ADE7880_PHASE_COUNT]; /**< True after VA calibration. */
+    App_CalibrationSource apparent_power_source[ADE7880_PHASE_COUNT];
     float power_factor[ADE7880_PHASE_COUNT]; /**< Signed PF from -1 to +1. */
     bool power_factor_valid[ADE7880_PHASE_COUNT]; /**< True after a complete read. */
     float neutral_current_a; /**< Neutral RMS current in amperes when valid. */
     bool neutral_current_valid; /**< True after neutral-current calibration. */
+    App_CalibrationSource neutral_current_source; /**< Origin of neutral scale. */
 } App_ElectricalState;
 
 /**
