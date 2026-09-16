@@ -7,26 +7,29 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#define DIAGNOSTIC_LED_STEP_MS 125U
-#define DIAGNOSTIC_ERROR_STEP_MS 150U
-#define LED_1_MASK 0x01U
-#define LED_2_MASK 0x02U
+#define DIAGNOSTIC_LED_STEP_MS 125U /**< Normal pattern step duration. */
+#define DIAGNOSTIC_ERROR_STEP_MS 150U /**< Fault pattern step duration. */
+#define LED_1_MASK 0x01U /**< Bit representing LED 1 in a pattern step. */
+#define LED_2_MASK 0x02U /**< Bit representing LED 2 in a pattern step. */
 
+/** Slow heartbeat sequence used when a simple alive marker is preferred. */
 static const uint8_t heartbeat_pattern[] = {
     LED_1_MASK | LED_2_MASK, 0U, LED_1_MASK, 0U, 0U, 0U, 0U, 0U
 };
 
+/** Default healthy sequence shown after ADE7880 starts successfully. */
 static const uint8_t dance_pattern[] = {
     LED_1_MASK, 0U, LED_2_MASK, 0U,
     LED_1_MASK | LED_2_MASK, 0U, 0U, 0U
 };
 
+/** Fast alternation used while ADE7880 communication is offline. */
 static const uint8_t error_pattern[] = {LED_1_MASK, LED_2_MASK};
 
-static bool initialized;
-static DiagnosticLed_Mode mode = DIAGNOSTIC_LED_MODE_OFF;
-static uint8_t step_index;
-static uint32_t last_step_ms;
+static bool initialized; /**< Prevents use before GPIO configuration. */
+static DiagnosticLed_Mode mode = DIAGNOSTIC_LED_MODE_OFF; /**< Active pattern. */
+static uint8_t step_index; /**< Current element in the active pattern. */
+static uint32_t last_step_ms; /**< HAL tick corresponding to step_index. */
 
 /** Translate a logical LED state to the configured electrical polarity. */
 static GPIO_PinState gpio_state(bool on)
@@ -73,10 +76,12 @@ static const uint8_t *get_pattern(DiagnosticLed_Mode selected_mode,
     }
 }
 
+/** Configure both pins and reset the sequencer to its known OFF state. */
 void DiagnosticLed_Init(void)
 {
     GPIO_InitTypeDef gpio = {0};
 
+    /* Reconfiguration is intentional so Error_Handler can safely call us. */
     __HAL_RCC_GPIOC_CLK_ENABLE();
     gpio.Pin = DIAGNOSTIC_LED_1_PIN | DIAGNOSTIC_LED_2_PIN;
     gpio.Mode = GPIO_MODE_OUTPUT_PP;
@@ -91,6 +96,7 @@ void DiagnosticLed_Init(void)
     write_pattern(0U);
 }
 
+/** Select a pattern and make its first step visible immediately. */
 void DiagnosticLed_SetMode(DiagnosticLed_Mode new_mode)
 {
     uint8_t length;
@@ -104,6 +110,7 @@ void DiagnosticLed_SetMode(DiagnosticLed_Mode new_mode)
         new_mode = DIAGNOSTIC_LED_MODE_OFF;
     }
 
+    /* Restart from step zero so a mode change is immediately visible. */
     mode = new_mode;
     step_index = 0U;
     last_step_ms = HAL_GetTick();
@@ -111,6 +118,7 @@ void DiagnosticLed_SetMode(DiagnosticLed_Mode new_mode)
     write_pattern((pattern != NULL) ? pattern[0] : 0U);
 }
 
+/** Advance the active sequence according to elapsed HAL ticks. */
 void DiagnosticLed_Process(void)
 {
     uint8_t length;
@@ -141,6 +149,7 @@ void DiagnosticLed_Process(void)
     write_pattern(pattern[step_index]);
 }
 
+/** Return the currently selected pattern without changing state. */
 DiagnosticLed_Mode DiagnosticLed_GetMode(void)
 {
     return mode;

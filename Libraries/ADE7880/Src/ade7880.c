@@ -1,14 +1,18 @@
-/** @file ade7880.c */
+/**
+ * @file ade7880.c
+ * @brief Platform-independent ADE7880 SPI protocol and data conversion.
+ */
 #include "ade7880.h"
 
 #include <string.h>
 
-#define ADE7880_SPI_READ  0x01U
-#define ADE7880_SPI_WRITE 0x00U
-#define ADE7880_CONFIG_SWRST (1UL << 7U)
-#define ADE7880_STATUS1_RSTDONE (1UL << 15U)
-#define ADE7880_POWER_UP_DELAY_MS 50U
+#define ADE7880_SPI_READ  0x01U /**< SPI command byte for register reads. */
+#define ADE7880_SPI_WRITE 0x00U /**< SPI command byte for register writes. */
+#define ADE7880_CONFIG_SWRST (1UL << 7U) /**< Software-reset request bit. */
+#define ADE7880_STATUS1_RSTDONE (1UL << 15U) /**< Reset-complete flag. */
+#define ADE7880_POWER_UP_DELAY_MS 50U /**< 40 ms data-sheet delay plus margin. */
 
+/** Register lookup tables keep phase selection out of the read algorithm. */
 static const uint16_t voltage_register[ADE7880_PHASE_COUNT] = {
     ADE7880_REG_AVRMS, ADE7880_REG_BVRMS, ADE7880_REG_CVRMS
 };
@@ -66,10 +70,12 @@ static ADE7880_Status transfer(ADE7880_Device *device,
     return status;
 }
 
+/** Validate and copy the caller's hardware-abstraction callbacks. */
 ADE7880_Status ADE7880_Init(ADE7880_Device *device,
                             const ADE7880_Transport *transport,
                             uint32_t timeout_ms)
 {
+    /* Reject an incomplete transport now, before any GPIO or SPI is touched. */
     if ((device == NULL) || (transport == NULL) ||
         (transport->write == NULL) || (transport->read == NULL) ||
         (transport->select == NULL) || (transport->delay_ms == NULL) ||
@@ -78,6 +84,7 @@ ADE7880_Status ADE7880_Init(ADE7880_Device *device,
     }
 
     memset(device, 0, sizeof(*device));
+    /* Copy callbacks so their source structure may be a temporary variable. */
     device->transport = *transport;
     device->timeout_ms = timeout_ms;
     device->bound = true;
@@ -85,11 +92,13 @@ ADE7880_Status ADE7880_Init(ADE7880_Device *device,
     return ADE7880_STATUS_OK;
 }
 
+/** Execute one complete register-read transaction. */
 ADE7880_Status ADE7880_ReadRegister(ADE7880_Device *device,
                                     uint16_t address,
                                     uint8_t width,
                                     uint32_t *value)
 {
+    /* Every read begins with command, high address byte, and low address byte. */
     const uint8_t command[3] = {
         ADE7880_SPI_READ, (uint8_t)(address >> 8U), (uint8_t)address
     };
@@ -106,6 +115,7 @@ ADE7880_Status ADE7880_ReadRegister(ADE7880_Device *device,
     if (status != ADE7880_STATUS_OK) {
         return status;
     }
+    /* ADE7880 transmits the most-significant data byte first. */
     for (uint8_t index = 0U; index < width; ++index) {
         result = (result << 8U) | bytes[index];
     }
@@ -113,11 +123,13 @@ ADE7880_Status ADE7880_ReadRegister(ADE7880_Device *device,
     return ADE7880_STATUS_OK;
 }
 
+/** Build and transmit one complete register-write frame. */
 ADE7880_Status ADE7880_WriteRegister(ADE7880_Device *device,
                                      uint16_t address,
                                      uint8_t width,
                                      uint32_t value)
 {
+    /* The largest legal frame is a 3-byte header plus a 4-byte value. */
     uint8_t frame[7] = {
         ADE7880_SPI_WRITE, (uint8_t)(address >> 8U), (uint8_t)address
     };
@@ -126,6 +138,7 @@ ADE7880_Status ADE7880_WriteRegister(ADE7880_Device *device,
         ((width != 1U) && (width != 2U) && (width != 4U))) {
         return ADE7880_STATUS_INVALID_ARGUMENT;
     }
+    /* Append only the selected register width, most-significant byte first. */
     for (uint8_t index = 0U; index < width; ++index) {
         const uint8_t shift = (uint8_t)((width - 1U - index) * 8U);
         frame[3U + index] = (uint8_t)(value >> shift);
@@ -133,6 +146,7 @@ ADE7880_Status ADE7880_WriteRegister(ADE7880_Device *device,
     return transfer(device, frame, (size_t)width + 3U, NULL, 0U);
 }
 
+/** Write a register and prove the operation by reading it back. */
 ADE7880_Status ADE7880_WriteRegisterVerified(ADE7880_Device *device,
                                              uint16_t address,
                                              uint8_t width,
@@ -149,11 +163,13 @@ ADE7880_Status ADE7880_WriteRegisterVerified(ADE7880_Device *device,
     if (status != ADE7880_STATUS_OK) {
         return status;
     }
+    /* Ignore unused upper bits when verifying an 8- or 16-bit register. */
     mask = (width == 4U) ? UINT32_MAX : ((1UL << (width * 8U)) - 1UL);
     return ((readback & mask) == (value & mask))
                ? ADE7880_STATUS_OK : ADE7880_STATUS_VERIFY_FAILED;
 }
 
+/** Select SPI after power-up and lock the serial interface through CONFIG2. */
 ADE7880_Status ADE7880_SelectSpi(ADE7880_Device *device)
 {
     if (!valid_device(device)) {
@@ -174,6 +190,7 @@ ADE7880_Status ADE7880_SelectSpi(ADE7880_Device *device)
     return ADE7880_WriteRegisterVerified(device, ADE7880_REG_CONFIG2, 1U, 0U);
 }
 
+/** Perform a bounded software reset and clear the completion flag. */
 ADE7880_Status ADE7880_SoftwareReset(ADE7880_Device *device,
                                      uint32_t reset_timeout_ms)
 {
@@ -194,6 +211,7 @@ ADE7880_Status ADE7880_SoftwareReset(ADE7880_Device *device,
         return status;
     }
 
+    /* Poll once per millisecond; the bounded loop prevents startup lockup. */
     for (uint32_t elapsed = 0U; elapsed < reset_timeout_ms; ++elapsed) {
         status = ADE7880_ReadRegister(device, ADE7880_REG_CONFIG, 2U, &config);
         if (status != ADE7880_STATUS_OK) {
@@ -205,6 +223,7 @@ ADE7880_Status ADE7880_SoftwareReset(ADE7880_Device *device,
         }
         if (((config & ADE7880_CONFIG_SWRST) == 0U) &&
             ((status1 & ADE7880_STATUS1_RSTDONE) != 0U)) {
+            /* RSTDONE is write-one-to-clear; leave a clean status for the app. */
             return ADE7880_WriteRegister(device, ADE7880_REG_STATUS1, 4U,
                                          ADE7880_STATUS1_RSTDONE);
         }
@@ -213,11 +232,13 @@ ADE7880_Status ADE7880_SoftwareReset(ADE7880_Device *device,
     return ADE7880_STATUS_TIMEOUT;
 }
 
+/** Start the measurement DSP and verify the RUN register. */
 ADE7880_Status ADE7880_StartMeasurements(ADE7880_Device *device)
 {
     return ADE7880_WriteRegisterVerified(device, ADE7880_REG_RUN, 2U, 1U);
 }
 
+/** Run the complete power-up sequence required before measurement reads. */
 ADE7880_Status ADE7880_Begin(ADE7880_Device *device,
                              uint32_t reset_timeout_ms)
 {
@@ -239,6 +260,7 @@ ADE7880_Status ADE7880_Begin(ADE7880_Device *device,
     return status;
 }
 
+/** Collect every supported register for one selected phase. */
 ADE7880_Status ADE7880_ReadPhase(ADE7880_Device *device,
                                  ADE7880_Phase phase,
                                  ADE7880_PhaseRaw *measurement)
@@ -252,6 +274,7 @@ ADE7880_Status ADE7880_ReadPhase(ADE7880_Device *device,
         return ADE7880_STATUS_INVALID_ARGUMENT;
     }
 
+    /* Use a local sample so the caller never receives a partially read phase. */
     status = ADE7880_ReadRegister(device, voltage_register[phase], 4U, &value);
     if (status != ADE7880_STATUS_OK) return status;
     sample.voltage_rms = value & 0x00FFFFFFUL;
@@ -276,6 +299,7 @@ ADE7880_Status ADE7880_ReadPhase(ADE7880_Device *device,
     return ADE7880_STATUS_OK;
 }
 
+/** Collect three phases and neutral into one all-or-nothing snapshot. */
 ADE7880_Status ADE7880_ReadAll(ADE7880_Device *device,
                                ADE7880_MeasurementsRaw *measurements)
 {
@@ -286,6 +310,7 @@ ADE7880_Status ADE7880_ReadAll(ADE7880_Device *device,
     if (!valid_device(device) || (measurements == NULL)) {
         return ADE7880_STATUS_INVALID_ARGUMENT;
     }
+    /* Publish nothing until all three phase blocks and neutral have succeeded. */
     for (uint32_t phase = 0U; phase < ADE7880_PHASE_COUNT; ++phase) {
         status = ADE7880_ReadPhase(device, (ADE7880_Phase)phase,
                                    &sample.phase[phase]);
@@ -302,37 +327,54 @@ ADE7880_Status ADE7880_ReadAll(ADE7880_Device *device,
     return ADE7880_STATUS_OK;
 }
 
-/** Apply one calibration pair while keeping conversion code readable. */
-static float convert_value(float raw, ADE7880_LinearCalibration calibration)
+/** Convert one register count with one board-specific scale and offset. */
+ADE7880_Status ADE7880_ApplyLinearCalibration(
+    float raw, const ADE7880_LinearCalibration *calibration,
+    float *engineering_value)
 {
-    return raw * calibration.scale + calibration.offset;
+    if ((calibration == NULL) || (engineering_value == NULL)) {
+        return ADE7880_STATUS_INVALID_ARGUMENT;
+    }
+    *engineering_value = raw * calibration->scale + calibration->offset;
+    return ADE7880_STATUS_OK;
 }
 
-void ADE7880_Convert(const ADE7880_MeasurementsRaw *raw,
-                     const ADE7880_Calibration *calibration,
-                     ADE7880_Measurements *measurements)
+/** Convert every supported quantity in a complete raw snapshot. */
+ADE7880_Status ADE7880_Convert(const ADE7880_MeasurementsRaw *raw,
+                               const ADE7880_Calibration *calibration,
+                               ADE7880_Measurements *measurements)
 {
     if ((raw == NULL) || (calibration == NULL) || (measurements == NULL)) {
-        return;
+        return ADE7880_STATUS_INVALID_ARGUMENT;
     }
     for (uint32_t phase = 0U; phase < ADE7880_PHASE_COUNT; ++phase) {
-        measurements->phase[phase].voltage_v = convert_value(
-            (float)raw->phase[phase].voltage_rms, calibration->voltage[phase]);
-        measurements->phase[phase].current_a = convert_value(
-            (float)raw->phase[phase].current_rms, calibration->current[phase]);
-        measurements->phase[phase].active_power_w = convert_value(
+        (void)ADE7880_ApplyLinearCalibration(
+            (float)raw->phase[phase].voltage_rms,
+            &calibration->voltage[phase],
+            &measurements->phase[phase].voltage_v);
+        (void)ADE7880_ApplyLinearCalibration(
+            (float)raw->phase[phase].current_rms,
+            &calibration->current[phase],
+            &measurements->phase[phase].current_a);
+        (void)ADE7880_ApplyLinearCalibration(
             (float)raw->phase[phase].active_power,
-            calibration->active_power[phase]);
-        measurements->phase[phase].apparent_power_va = convert_value(
+            &calibration->active_power[phase],
+            &measurements->phase[phase].active_power_w);
+        (void)ADE7880_ApplyLinearCalibration(
             (float)raw->phase[phase].apparent_power,
-            calibration->apparent_power[phase]);
+            &calibration->apparent_power[phase],
+            &measurements->phase[phase].apparent_power_va);
+        /* PF has a fixed Q1.15 format and therefore needs no board scale. */
         measurements->phase[phase].power_factor =
             (float)raw->phase[phase].power_factor_q15 / 32768.0F;
     }
-    measurements->neutral_current_a = convert_value(
-        (float)raw->neutral_current_rms, calibration->neutral_current);
+    (void)ADE7880_ApplyLinearCalibration(
+        (float)raw->neutral_current_rms, &calibration->neutral_current,
+        &measurements->neutral_current_a);
+    return ADE7880_STATUS_OK;
 }
 
+/** Solve the linear calibration equation from two measured reference points. */
 ADE7880_Status ADE7880_CalculateLinearCalibration(
     float raw_1, float reference_1, float raw_2, float reference_2,
     ADE7880_LinearCalibration *calibration)
@@ -342,6 +384,7 @@ ADE7880_Status ADE7880_CalculateLinearCalibration(
     if ((calibration == NULL) || (raw_span == 0.0F)) {
         return ADE7880_STATUS_INVALID_ARGUMENT;
     }
+    /* Solve engineering = raw * scale + offset for the two supplied points. */
     calibration->scale = (reference_2 - reference_1) / raw_span;
     calibration->offset = reference_1 - raw_1 * calibration->scale;
     return ADE7880_STATUS_OK;

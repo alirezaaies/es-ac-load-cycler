@@ -41,12 +41,14 @@ int main(void)
   MX_SPI2_Init();
 
   /* USER CODE BEGIN 2 */
+  /* Bind the portable ADE7880 driver after CubeMX initializes SPI2 and GPIO. */
   App_Init(&hspi2);
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    /* Keep this cooperative service running; it samples ADE7880 once/second. */
     App_Process();
     /* USER CODE END WHILE */
     /* USER CODE BEGIN 3 */

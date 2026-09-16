@@ -16,17 +16,17 @@ extern "C" {
 #define DIAGNOSTIC_LED_ACTIVE_LOW 1U
 #endif
 
-#define DIAGNOSTIC_LED_1_PORT GPIOC
-#define DIAGNOSTIC_LED_1_PIN  GPIO_PIN_13
-#define DIAGNOSTIC_LED_2_PORT GPIOC
-#define DIAGNOSTIC_LED_2_PIN  GPIO_PIN_14
+#define DIAGNOSTIC_LED_1_PORT GPIOC       /**< GPIO bank for diagnostic LED 1. */
+#define DIAGNOSTIC_LED_1_PIN  GPIO_PIN_13 /**< Pin mask for diagnostic LED 1. */
+#define DIAGNOSTIC_LED_2_PORT GPIOC       /**< GPIO bank for diagnostic LED 2. */
+#define DIAGNOSTIC_LED_2_PIN  GPIO_PIN_14 /**< Pin mask for diagnostic LED 2. */
 
 /** Available visual states for normal operation, testing, and fatal errors. */
 typedef enum {
-    DIAGNOSTIC_LED_MODE_OFF = 0,
-    DIAGNOSTIC_LED_MODE_HEARTBEAT,
-    DIAGNOSTIC_LED_MODE_DANCE,
-    DIAGNOSTIC_LED_MODE_ERROR
+    DIAGNOSTIC_LED_MODE_OFF = 0, /**< Both LEDs remain off. */
+    DIAGNOSTIC_LED_MODE_HEARTBEAT, /**< Short periodic alive indication. */
+    DIAGNOSTIC_LED_MODE_DANCE, /**< Normal-operation two-LED sequence. */
+    DIAGNOSTIC_LED_MODE_ERROR /**< Fast alternating communication fault. */
 } DiagnosticLed_Mode;
 
 /** Configure PC13/PC14 as low-speed outputs and turn both LEDs off. */
