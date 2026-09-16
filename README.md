@@ -46,7 +46,7 @@ pio run -e stm32f107vc_jlink --target upload
 
 ## ساخت در Keil
 
-`MDK-ARM/STM32F107.uvprojx` را باز کنید، Target را Build و سپس با J-Link پروگرام کنید. فایل ADE7880 و مسیرهای include از قبل در پروژه هستند. این نسخه با Arm Compiler 6.24 ساخته و با نتیجه `0 Error(s), 0 Warning(s)` تأیید شده است. اندازه گزارش‌شده Keil برابر `Code=9828`، `RO-data=476`، `RW-data=12` و `ZI-data=1532` بایت است.
+`MDK-ARM/STM32F107.uvprojx` را باز کنید، Target را Build و سپس با J-Link پروگرام کنید. فایل ADE7880 و مسیرهای include از قبل در پروژه هستند. این نسخه با Arm Compiler 6.24 ساخته و با نتیجه `0 Error(s), 0 Warning(s)` تأیید شده است. اندازه گزارش‌شده Keil برابر `Code=9848`، `RO-data=580`، `RW-data=12` و `ZI-data=1532` بایت است.
 
 اگر خطاهای متعدد `unknown type name DMA_HandleTypeDef` در هدرهای HAL دیده شدند، ابتدا تعریف `HAL_DMA_MODULE_ENABLED` را در `Core/Inc/stm32f1xx_hal_conf.h` و حضور `stm32f1xx_hal_dma.c` در پروژه کنترل کنید. فعال‌بودن این ماژول برای تعریف نوع‌های DMA مورد استفاده داخل handleهای HAL لازم است؛ این موضوع به‌تنهایی به معنی استفاده برنامه از انتقال DMA نیست.
 
