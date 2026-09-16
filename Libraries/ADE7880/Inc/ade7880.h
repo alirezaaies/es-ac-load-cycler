@@ -103,6 +103,12 @@ typedef struct {
     float offset; /**< Engineering value added after scaling. */
 } ADE7880_LinearCalibration;
 
+/** One averaged raw/reference pair used for multi-point calibration. */
+typedef struct {
+    float raw; /**< Average ADE7880 register count at this operating point. */
+    float reference; /**< Simultaneous value from the reference instrument. */
+} ADE7880_CalibrationPoint;
+
 /** Calibration values kept outside the IC and easy to store in Flash. */
 typedef struct {
     ADE7880_LinearCalibration voltage[ADE7880_PHASE_COUNT]; /**< Volts. */
@@ -278,6 +284,23 @@ ADE7880_Status ADE7880_Convert(const ADE7880_MeasurementsRaw *raw,
 ADE7880_Status ADE7880_CalculateLinearCalibration(
     float raw_1, float reference_1, float raw_2, float reference_2,
     ADE7880_LinearCalibration *calibration);
+
+/**
+ * @brief Fit one linear conversion to two or more calibration points.
+ * @param points Averaged raw counts paired with reference engineering values.
+ * @param point_count Number of entries in points; must be at least two.
+ * @param calibration Destination receiving least-squares scale and offset.
+ * @param max_abs_error Optional destination for the largest reference-unit
+ *        residual at the supplied points; pass NULL when it is not required.
+ * @return ADE7880_STATUS_OK, or INVALID_ARGUMENT for bad/constant raw points.
+ *
+ * Reference values must use the desired final unit: volts, amperes, watts, or
+ * volt-amperes. Three to five well-separated points are normally enough to
+ * verify the ADE7880's expected linear response over the required range.
+ */
+ADE7880_Status ADE7880_CalculateLinearCalibrationMultiPoint(
+    const ADE7880_CalibrationPoint *points, size_t point_count,
+    ADE7880_LinearCalibration *calibration, float *max_abs_error);
 
 #ifdef __cplusplus
 }

@@ -40,6 +40,28 @@ static bool phase_conversion_enabled[APP_PHASE_QUANTITY_COUNT]
                                     [ADE7880_PHASE_COUNT];
 static bool neutral_current_conversion_enabled;
 
+/** Refresh optional legacy-style display values without altering SI fields. */
+static void update_display_values(void)
+{
+    for (uint32_t phase = 0U; phase < ADE7880_PHASE_COUNT; ++phase) {
+        g_app_electrical.current_display[phase] =
+            g_app_electrical.current_valid[phase]
+                ? g_app_electrical.current_a[phase] *
+                      g_app_electrical.current_display_units_per_a
+                : 0.0F;
+        g_app_electrical.active_power_display[phase] =
+            g_app_electrical.active_power_valid[phase]
+                ? g_app_electrical.active_power_w[phase] *
+                      g_app_electrical.power_display_units_per_w
+                : 0.0F;
+        g_app_electrical.apparent_power_display[phase] =
+            g_app_electrical.apparent_power_valid[phase]
+                ? g_app_electrical.apparent_power_va[phase] *
+                      g_app_electrical.power_display_units_per_w
+                : 0.0F;
+    }
+}
+
 /** Load the A/B scales recovered from the previous firmware for this board. */
 static void load_legacy_calibration(void)
 {
@@ -167,6 +189,7 @@ static void update_engineering_values(const ADE7880_MeasurementsRaw *sample)
         neutral_current_conversion_enabled,
         &g_app_electrical.neutral_current_a,
         &g_app_electrical.neutral_current_valid);
+    update_display_values();
 }
 
 /** Map STM32 HAL transfer results to the portable driver status values. */
@@ -261,6 +284,10 @@ void App_Init(SPI_HandleTypeDef *ade_spi)
     memset(&measurement_calibration, 0, sizeof(measurement_calibration));
     memset(phase_conversion_enabled, 0, sizeof(phase_conversion_enabled));
     neutral_current_conversion_enabled = false;
+    g_app_electrical.current_display_units_per_a =
+        APP_DEFAULT_CURRENT_DISPLAY_UNITS_PER_AMP;
+    g_app_electrical.power_display_units_per_w =
+        APP_DEFAULT_POWER_DISPLAY_UNITS_PER_WATT;
     for (uint32_t phase = 0U; phase < ADE7880_PHASE_COUNT; ++phase) {
         g_app_electrical.current_polarity[phase] =
             APP_CURRENT_POLARITY_NORMAL;
@@ -391,6 +418,40 @@ ADE7880_Status App_SetPhaseCalibration(
     return ADE7880_STATUS_OK;
 }
 
+/** Fit and install one SI conversion from multiple operating points. */
+ADE7880_Status App_CalibratePhaseMultiPoint(
+    App_PhaseQuantity quantity, ADE7880_Phase phase,
+    const ADE7880_CalibrationPoint *points, size_t point_count,
+    ADE7880_LinearCalibration *calibration_result,
+    float *max_abs_error)
+{
+    ADE7880_LinearCalibration calibration;
+    ADE7880_Status status;
+
+    if (((uint32_t)quantity >= (uint32_t)APP_PHASE_QUANTITY_COUNT) ||
+        ((uint32_t)phase >= (uint32_t)ADE7880_PHASE_COUNT)) {
+        return ADE7880_STATUS_INVALID_ARGUMENT;
+    }
+    status = ADE7880_CalculateLinearCalibrationMultiPoint(
+        points, point_count, &calibration, max_abs_error);
+
+    if (status != ADE7880_STATUS_OK) {
+        return status;
+    }
+    /* References describe the final published sign, after CT correction. */
+    if ((quantity == APP_PHASE_QUANTITY_ACTIVE_POWER) &&
+        (g_app_electrical.current_polarity[phase] ==
+         APP_CURRENT_POLARITY_REVERSED)) {
+        calibration.scale = -calibration.scale;
+        calibration.offset = -calibration.offset;
+    }
+    status = App_SetPhaseCalibration(quantity, phase, &calibration);
+    if ((status == ADE7880_STATUS_OK) && (calibration_result != NULL)) {
+        *calibration_result = calibration;
+    }
+    return status;
+}
+
 /** Install a measured scale for the neutral RMS current register. */
 ADE7880_Status App_SetNeutralCurrentCalibration(
     const ADE7880_LinearCalibration *calibration)
@@ -419,5 +480,19 @@ ADE7880_Status App_SetCurrentPolarity(ADE7880_Phase phase,
     /* Signed values are stale until they are rebuilt from the next snapshot. */
     g_app_electrical.active_power_valid[phase] = false;
     g_app_electrical.power_factor_valid[phase] = false;
+    return ADE7880_STATUS_OK;
+}
+
+/** Change display multipliers while preserving calibrated SI measurements. */
+ADE7880_Status App_SetDisplayUnits(float current_units_per_a,
+                                   float power_units_per_w)
+{
+    if ((current_units_per_a <= 0.0F) || (power_units_per_w <= 0.0F)) {
+        return ADE7880_STATUS_INVALID_ARGUMENT;
+    }
+
+    g_app_electrical.current_display_units_per_a = current_units_per_a;
+    g_app_electrical.power_display_units_per_w = power_units_per_w;
+    update_display_values();
     return ADE7880_STATUS_OK;
 }

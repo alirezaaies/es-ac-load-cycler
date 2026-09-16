@@ -14,6 +14,17 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/*
+ * Default legacy-style display units. Override these build-time constants or
+ * call App_SetDisplayUnits() at runtime without changing the SI measurements.
+ */
+#ifndef APP_DEFAULT_CURRENT_DISPLAY_UNITS_PER_AMP
+#define APP_DEFAULT_CURRENT_DISPLAY_UNITS_PER_AMP 100.0F
+#endif
+#ifndef APP_DEFAULT_POWER_DISPLAY_UNITS_PER_WATT
+#define APP_DEFAULT_POWER_DISPLAY_UNITS_PER_WATT 10.0F
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -60,12 +71,15 @@ typedef struct {
     bool voltage_valid[ADE7880_PHASE_COUNT]; /**< True when voltage_v is usable. */
     App_CalibrationSource voltage_source[ADE7880_PHASE_COUNT];
     float current_a[ADE7880_PHASE_COUNT]; /**< RMS current in amperes when valid. */
+    float current_display[ADE7880_PHASE_COUNT]; /**< Current in selected display units. */
     bool current_valid[ADE7880_PHASE_COUNT]; /**< True after current calibration. */
     App_CalibrationSource current_source[ADE7880_PHASE_COUNT];
     float active_power_w[ADE7880_PHASE_COUNT]; /**< Active power in watts. */
+    float active_power_display[ADE7880_PHASE_COUNT]; /**< Active power in display units. */
     bool active_power_valid[ADE7880_PHASE_COUNT]; /**< True after watt calibration. */
     App_CalibrationSource active_power_source[ADE7880_PHASE_COUNT];
     float apparent_power_va[ADE7880_PHASE_COUNT]; /**< Apparent power in VA. */
+    float apparent_power_display[ADE7880_PHASE_COUNT]; /**< Apparent power in display units. */
     bool apparent_power_valid[ADE7880_PHASE_COUNT]; /**< True after VA calibration. */
     App_CalibrationSource apparent_power_source[ADE7880_PHASE_COUNT];
     float power_factor[ADE7880_PHASE_COUNT]; /**< Signed PF from -1 to +1. */
@@ -73,6 +87,8 @@ typedef struct {
     bool power_factor_valid[ADE7880_PHASE_COUNT]; /**< True after a complete read. */
     App_CurrentPolarity current_polarity[ADE7880_PHASE_COUNT];
         /**< Configured CT polarity correction for each phase. */
+    float current_display_units_per_a; /**< Default 100 gives 0.01 A units. */
+    float power_display_units_per_w; /**< Default 10 gives 0.1 W/VA units. */
     float neutral_current_a; /**< Neutral RMS current in amperes when valid. */
     bool neutral_current_valid; /**< True after neutral-current calibration. */
     App_CalibrationSource neutral_current_source; /**< Origin of neutral scale. */
@@ -147,6 +163,37 @@ ADE7880_Status App_SetPhaseCalibration(
     const ADE7880_LinearCalibration *calibration);
 
 /**
+ * @brief Fit and install one phase calibration from two or more points.
+ * @param quantity Voltage, current, active power, or apparent power.
+ * @param phase Phase A, B, or C associated with every raw point.
+ * @param points Averaged raw/reference pairs in final SI units.
+ * @param point_count Number of pairs; three to five are recommended.
+ * @param calibration_result Optional installed scale/offset for saving later.
+ * @param max_abs_error Optional worst residual in volts, amperes, watts, or VA.
+ * @return ADE7880_STATUS_OK or ADE7880_STATUS_INVALID_ARGUMENT.
+ *
+ * Example for phase-A active power using low, medium, and high loads:
+ * @code
+ * const ADE7880_CalibrationPoint watts[] = {
+ *     {raw_at_20_w, 20.0F},
+ *     {raw_at_200_w, 200.0F},
+ *     {raw_at_1000_w, 1000.0F}
+ * };
+ * ADE7880_LinearCalibration fitted_watts;
+ * float worst_error_w;
+ * (void)App_CalibratePhaseMultiPoint(
+ *     APP_PHASE_QUANTITY_ACTIVE_POWER, ADE7880_PHASE_A,
+ *     watts, sizeof(watts) / sizeof(watts[0]),
+ *     &fitted_watts, &worst_error_w);
+ * @endcode
+ */
+ADE7880_Status App_CalibratePhaseMultiPoint(
+    App_PhaseQuantity quantity, ADE7880_Phase phase,
+    const ADE7880_CalibrationPoint *points, size_t point_count,
+    ADE7880_LinearCalibration *calibration_result,
+    float *max_abs_error);
+
+/**
  * @brief Install the neutral-current conversion from NIRMS counts to amperes.
  * @param calibration Scale and offset calculated from two reference points.
  * @return ADE7880_STATUS_OK or ADE7880_STATUS_INVALID_ARGUMENT.
@@ -172,6 +219,18 @@ ADE7880_Status App_SetNeutralCurrentCalibration(
  */
 ADE7880_Status App_SetCurrentPolarity(ADE7880_Phase phase,
                                       App_CurrentPolarity polarity);
+
+/**
+ * @brief Change only the debugger/UI display-unit multipliers.
+ * @param current_units_per_a Use 100 for 0.01 A units or 1 for amperes.
+ * @param power_units_per_w Use 10 for 0.1 W units or 1 for watts.
+ * @return ADE7880_STATUS_OK, or INVALID_ARGUMENT for nonpositive multipliers.
+ *
+ * SI fields (`current_a`, `active_power_w`, and `apparent_power_va`) are never
+ * changed by this function. The display fields are refreshed immediately.
+ */
+ADE7880_Status App_SetDisplayUnits(float current_units_per_a,
+                                   float power_units_per_w);
 
 #ifdef __cplusplus
 }

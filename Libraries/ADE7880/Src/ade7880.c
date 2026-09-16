@@ -379,13 +379,72 @@ ADE7880_Status ADE7880_CalculateLinearCalibration(
     float raw_1, float reference_1, float raw_2, float reference_2,
     ADE7880_LinearCalibration *calibration)
 {
-    const float raw_span = raw_2 - raw_1;
+    const ADE7880_CalibrationPoint points[2] = {
+        {.raw = raw_1, .reference = reference_1},
+        {.raw = raw_2, .reference = reference_2}
+    };
 
-    if ((calibration == NULL) || (raw_span == 0.0F)) {
+    return ADE7880_CalculateLinearCalibrationMultiPoint(
+        points, 2U, calibration, NULL);
+}
+
+/** Fit a stable least-squares line and report its worst supplied-point error. */
+ADE7880_Status ADE7880_CalculateLinearCalibrationMultiPoint(
+    const ADE7880_CalibrationPoint *points, size_t point_count,
+    ADE7880_LinearCalibration *calibration, float *max_abs_error)
+{
+    double raw_mean = 0.0;
+    double reference_mean = 0.0;
+    double raw_variance = 0.0;
+    double covariance = 0.0;
+    double scale;
+    double offset;
+    double maximum_error = 0.0;
+
+    if ((points == NULL) || (calibration == NULL) || (point_count < 2U)) {
         return ADE7880_STATUS_INVALID_ARGUMENT;
     }
-    /* Solve engineering = raw * scale + offset for the two supplied points. */
-    calibration->scale = (reference_2 - reference_1) / raw_span;
-    calibration->offset = reference_1 - raw_1 * calibration->scale;
+
+    /* Centering before multiplication preserves precision for large counts. */
+    for (size_t index = 0U; index < point_count; ++index) {
+        raw_mean += (double)points[index].raw;
+        reference_mean += (double)points[index].reference;
+    }
+    raw_mean /= (double)point_count;
+    reference_mean /= (double)point_count;
+
+    for (size_t index = 0U; index < point_count; ++index) {
+        const double raw_delta = (double)points[index].raw - raw_mean;
+        const double reference_delta =
+            (double)points[index].reference - reference_mean;
+        raw_variance += raw_delta * raw_delta;
+        covariance += raw_delta * reference_delta;
+    }
+    if (raw_variance == 0.0) {
+        return ADE7880_STATUS_INVALID_ARGUMENT;
+    }
+
+    scale = covariance / raw_variance;
+    offset = reference_mean - scale * raw_mean;
+    calibration->scale = (float)scale;
+    calibration->offset = (float)offset;
+
+    /* Evaluate the exact float coefficients that the conversion will use. */
+    scale = (double)calibration->scale;
+    offset = (double)calibration->offset;
+    for (size_t index = 0U; index < point_count; ++index) {
+        double error = scale * (double)points[index].raw + offset -
+                       (double)points[index].reference;
+        if (error < 0.0) {
+            error = -error;
+        }
+        if (error > maximum_error) {
+            maximum_error = error;
+        }
+    }
+
+    if (max_abs_error != NULL) {
+        *max_abs_error = (float)maximum_error;
+    }
     return ADE7880_STATUS_OK;
 }
