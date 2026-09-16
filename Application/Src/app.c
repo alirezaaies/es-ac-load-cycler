@@ -21,8 +21,12 @@
  */
 #define LEGACY_VOLTAGE_SCALE_V_PER_COUNT 0.00055963F
 #define LEGACY_PHASE_A_CORRECTION 1.017F
-#define LEGACY_CURRENT_SCALE_A_PER_COUNT 0.00036565F
-#define LEGACY_POWER_SCALE_W_PER_COUNT 0.0170276F
+/*
+ * The old firmware exported current in 0.01 A and power in 0.1 W units.
+ * Convert those legacy fixed-point coefficients to true SI units here.
+ */
+#define LEGACY_CURRENT_SCALE_A_PER_COUNT (0.00036565F / 100.0F)
+#define LEGACY_POWER_SCALE_W_PER_COUNT (0.0170276F / 10.0F)
 #define LEGACY_PHASE_A_POWER_CORRECTION 1.02F
 
 /** Public live state; inspect this symbol in the debugger Watch window. */
@@ -133,9 +137,27 @@ static void update_engineering_values(const ADE7880_MeasurementsRaw *sample)
             &g_app_electrical.apparent_power_va[phase],
             &g_app_electrical.apparent_power_valid[phase]);
 
-        /* APF/BPF/CPF use signed Q1.15, so no board-specific scale is needed. */
-        g_app_electrical.power_factor[phase] =
+        /*
+         * Reversing a CT changes the signs of both active power and signed PF,
+         * but it does not change RMS current, apparent power, or PF magnitude.
+         */
+        if ((g_app_electrical.current_polarity[phase] ==
+             APP_CURRENT_POLARITY_REVERSED) &&
+            g_app_electrical.active_power_valid[phase]) {
+            g_app_electrical.active_power_w[phase] =
+                -g_app_electrical.active_power_w[phase];
+        }
+
+        /* APF/BPF/CPF use signed Q1.15, so no gain calibration is needed. */
+        float signed_pf =
             (float)sample->phase[phase].power_factor_q15 / 32768.0F;
+        if (g_app_electrical.current_polarity[phase] ==
+            APP_CURRENT_POLARITY_REVERSED) {
+            signed_pf = -signed_pf;
+        }
+        g_app_electrical.power_factor[phase] = signed_pf;
+        g_app_electrical.power_factor_abs[phase] =
+            (signed_pf < 0.0F) ? -signed_pf : signed_pf;
         g_app_electrical.power_factor_valid[phase] = true;
     }
 
@@ -239,6 +261,10 @@ void App_Init(SPI_HandleTypeDef *ade_spi)
     memset(&measurement_calibration, 0, sizeof(measurement_calibration));
     memset(phase_conversion_enabled, 0, sizeof(phase_conversion_enabled));
     neutral_current_conversion_enabled = false;
+    for (uint32_t phase = 0U; phase < ADE7880_PHASE_COUNT; ++phase) {
+        g_app_electrical.current_polarity[phase] =
+            APP_CURRENT_POLARITY_NORMAL;
+    }
     load_legacy_calibration();
     ade_spi_handle = ade_spi;
 
@@ -376,5 +402,22 @@ ADE7880_Status App_SetNeutralCurrentCalibration(
     neutral_current_conversion_enabled = true;
     g_app_electrical.neutral_current_valid = false;
     g_app_electrical.neutral_current_source = APP_CALIBRATION_USER;
+    return ADE7880_STATUS_OK;
+}
+
+/** Configure a persistent runtime correction for a reversed phase CT. */
+ADE7880_Status App_SetCurrentPolarity(ADE7880_Phase phase,
+                                      App_CurrentPolarity polarity)
+{
+    if (((uint32_t)phase >= (uint32_t)ADE7880_PHASE_COUNT) ||
+        ((polarity != APP_CURRENT_POLARITY_NORMAL) &&
+         (polarity != APP_CURRENT_POLARITY_REVERSED))) {
+        return ADE7880_STATUS_INVALID_ARGUMENT;
+    }
+
+    g_app_electrical.current_polarity[phase] = polarity;
+    /* Signed values are stale until they are rebuilt from the next snapshot. */
+    g_app_electrical.active_power_valid[phase] = false;
+    g_app_electrical.power_factor_valid[phase] = false;
     return ADE7880_STATUS_OK;
 }

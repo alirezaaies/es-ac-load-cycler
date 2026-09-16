@@ -35,6 +35,12 @@ typedef enum {
     APP_PHASE_QUANTITY_COUNT            /**< Number of phase quantities. */
 } App_PhaseQuantity;
 
+/** Selects whether firmware must compensate for a reversed phase CT. */
+typedef enum {
+    APP_CURRENT_POLARITY_NORMAL = 1, /**< Installed polarity is used unchanged. */
+    APP_CURRENT_POLARITY_REVERSED = -1 /**< Correct a CT connected 180 degrees backward. */
+} App_CurrentPolarity;
+
 /**
  * @brief ADE7880 state intended for the debugger Watch window.
  *
@@ -63,7 +69,10 @@ typedef struct {
     bool apparent_power_valid[ADE7880_PHASE_COUNT]; /**< True after VA calibration. */
     App_CalibrationSource apparent_power_source[ADE7880_PHASE_COUNT];
     float power_factor[ADE7880_PHASE_COUNT]; /**< Signed PF from -1 to +1. */
+    float power_factor_abs[ADE7880_PHASE_COUNT]; /**< PF magnitude from 0 to 1. */
     bool power_factor_valid[ADE7880_PHASE_COUNT]; /**< True after a complete read. */
+    App_CurrentPolarity current_polarity[ADE7880_PHASE_COUNT];
+        /**< Configured CT polarity correction for each phase. */
     float neutral_current_a; /**< Neutral RMS current in amperes when valid. */
     bool neutral_current_valid; /**< True after neutral-current calibration. */
     App_CalibrationSource neutral_current_source; /**< Origin of neutral scale. */
@@ -144,6 +153,25 @@ ADE7880_Status App_SetPhaseCalibration(
  */
 ADE7880_Status App_SetNeutralCurrentCalibration(
     const ADE7880_LinearCalibration *calibration);
+
+/**
+ * @brief Configure software compensation for one phase's CT direction.
+ * @param phase Phase A, B, or C whose current path is being corrected.
+ * @param polarity NORMAL for correct wiring or REVERSED for a backward CT.
+ * @return ADE7880_STATUS_OK or ADE7880_STATUS_INVALID_ARGUMENT.
+ *
+ * This setting changes the sign of active power and signed power factor. RMS
+ * current, apparent power, and power-factor magnitude remain positive. Select
+ * the setting once during commissioning; do not switch it from live readings.
+ *
+ * Example for a phase-A CT that cannot be physically reversed:
+ * @code
+ * (void)App_SetCurrentPolarity(ADE7880_PHASE_A,
+ *                              APP_CURRENT_POLARITY_REVERSED);
+ * @endcode
+ */
+ADE7880_Status App_SetCurrentPolarity(ADE7880_Phase phase,
+                                      App_CurrentPolarity polarity);
 
 #ifdef __cplusplus
 }
