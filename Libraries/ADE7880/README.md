@@ -73,6 +73,8 @@ window:
 - `apparent_power_va[n]`: apparent VA when `apparent_power_valid[n]` is true.
 - `apparent_power_source[n]`: origin of the apparent-power coefficient.
 - `power_factor[n]`: signed PF from -1 to +1 after `power_factor_valid[n]` is true.
+- `power_factor_abs[n]`: PF magnitude from 0 to 1, independent of lead/lag sign.
+- `current_polarity[n]`: NORMAL or REVERSED software correction for the phase CT.
 - `neutral_current_a`: neutral RMS amperes when its valid flag is true.
 - `last_status`: the exact result of the latest driver operation.
 
@@ -86,8 +88,11 @@ The application loads the following coefficients recovered from the previous
 firmware for phases A and B:
 
 - Voltage: `0.00055963 V/count`; phase A also uses correction `1.017`.
-- Current: `0.00036565 A/count`.
-- Active power: `0.0170276 W/count`; phase A also uses correction `1.02`.
+- Current: old coefficient `0.00036565` produced 0.01 A units, so the
+  provisional SI scale is `0.0000036565 A/count`.
+- Active power: old coefficient `0.0170276` produced 0.1 W units, so the
+  provisional SI scale is `0.00170276 W/count`; phase A also uses correction
+  `1.02`.
 
 The ADE7880 internally gain-matches active and apparent power on each phase,
 so the matching legacy power coefficient is also used provisionally for VA and
@@ -122,6 +127,33 @@ complete one-second sample. These RAM calibrations are lost at reset; after the
 coefficients are verified, load them during `App_Init()` or from nonvolatile
 memory. A lamp's printed wattage is only a nominal rating and is not a suitable
 accuracy reference.
+
+## CT direction and signed power factor
+
+For a consumption-only installation, fit the CT so normal load power produces
+positive `active_power_w[n]`. Follow the CT manufacturer's P1/K to source,
+P2/L to load, S1/k to current-positive, and S2/l to current-negative markings
+when those markings exist. Verify the board schematic before assuming terminal
+names.
+
+If the installed CT cannot be reversed, configure the correction once after
+`App_Init()`:
+
+```c
+(void)App_SetCurrentPolarity(ADE7880_PHASE_A,
+                             APP_CURRENT_POLARITY_REVERSED);
+```
+
+The correction changes the signs of active power and `power_factor`; it does
+not change RMS current, apparent power, or `power_factor_abs`. Do not infer and
+flip polarity automatically on every negative sample: a bidirectional system
+can legitimately report negative active power. A negative signed PF is also
+not automatically an error; ADE7880 uses its sign to distinguish leading and
+lagging current. Use `power_factor_abs[n]` when only PF magnitude is required.
+
+Never open-circuit a CT secondary while primary current can flow. De-energize
+the primary or use the manufacturer's approved shorting procedure before
+changing CT wiring.
 
 ## Status handling
 
