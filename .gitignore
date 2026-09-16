@@ -1,6 +1,11 @@
 .pio/
 .vscode/.browse.c_cpp.db*
 .vscode/ipch/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
 docs/*.aux
 docs/*.log
 docs/*.out
@@ -10,10 +15,10 @@ docs/*.lot
 docs/*.xdv
 docs/*.synctex.gz
 docs/build-pass-*.txt
-tmp/pdf-review/
-tmp/pdfs/
+tmp/
 MDK-ARM/STM32F107/
 MDK-ARM/*.lst
+MDK-ARM/*.uvoptx
 MDK-ARM/*.uvguix.*
 MDK-ARM/JLinkLog.txt
 MDK-ARM/*.log

@@ -84,6 +84,7 @@ void App_ResetCalibrationToDefaults(void)
 {
     measurement_calibration = default_calibration;
     neutral_current_conversion_enabled = true;
+    g_app_electrical.neutral_current_a = 0.0F;
     g_app_electrical.neutral_current_valid = false;
     g_app_electrical.neutral_current_source = APP_CALIBRATION_DEFAULT;
 
@@ -92,6 +93,10 @@ void App_ResetCalibrationToDefaults(void)
              quantity < (uint32_t)APP_PHASE_QUANTITY_COUNT; ++quantity) {
             phase_conversion_enabled[quantity][phase] = true;
         }
+        g_app_electrical.voltage_v[phase] = 0.0F;
+        g_app_electrical.current_a[phase] = 0.0F;
+        g_app_electrical.active_power_w[phase] = 0.0F;
+        g_app_electrical.apparent_power_va[phase] = 0.0F;
         g_app_electrical.voltage_valid[phase] = false;
         g_app_electrical.current_valid[phase] = false;
         g_app_electrical.active_power_valid[phase] = false;
@@ -367,19 +372,23 @@ static void invalidate_phase_value(App_PhaseQuantity quantity,
 {
     switch (quantity) {
     case APP_PHASE_QUANTITY_VOLTAGE_RMS:
+        g_app_electrical.voltage_v[phase] = 0.0F;
         g_app_electrical.voltage_valid[phase] = false;
         g_app_electrical.voltage_source[phase] =
             APP_CALIBRATION_USER;
         break;
     case APP_PHASE_QUANTITY_CURRENT_RMS:
+        g_app_electrical.current_a[phase] = 0.0F;
         g_app_electrical.current_valid[phase] = false;
         g_app_electrical.current_source[phase] = APP_CALIBRATION_USER;
         break;
     case APP_PHASE_QUANTITY_ACTIVE_POWER:
+        g_app_electrical.active_power_w[phase] = 0.0F;
         g_app_electrical.active_power_valid[phase] = false;
         g_app_electrical.active_power_source[phase] = APP_CALIBRATION_USER;
         break;
     case APP_PHASE_QUANTITY_APPARENT_POWER:
+        g_app_electrical.apparent_power_va[phase] = 0.0F;
         g_app_electrical.apparent_power_valid[phase] = false;
         g_app_electrical.apparent_power_source[phase] = APP_CALIBRATION_USER;
         break;
@@ -409,6 +418,7 @@ ADE7880_Status App_SetPhaseCalibration(
     *slot = *calibration;
     phase_conversion_enabled[quantity][phase] = true;
     invalidate_phase_value(quantity, phase);
+    update_display_values();
     return ADE7880_STATUS_OK;
 }
 
@@ -455,6 +465,7 @@ ADE7880_Status App_SetNeutralCurrentCalibration(
     }
     measurement_calibration.neutral_current = *calibration;
     neutral_current_conversion_enabled = true;
+    g_app_electrical.neutral_current_a = 0.0F;
     g_app_electrical.neutral_current_valid = false;
     g_app_electrical.neutral_current_source = APP_CALIBRATION_USER;
     return ADE7880_STATUS_OK;
@@ -492,8 +503,12 @@ ADE7880_Status App_SetCurrentPolarity(ADE7880_Phase phase,
 
     g_app_electrical.current_polarity[phase] = polarity;
     /* Signed values are stale until they are rebuilt from the next snapshot. */
+    g_app_electrical.active_power_w[phase] = 0.0F;
     g_app_electrical.active_power_valid[phase] = false;
+    g_app_electrical.power_factor[phase] = 0.0F;
+    g_app_electrical.power_factor_abs[phase] = 0.0F;
     g_app_electrical.power_factor_valid[phase] = false;
+    update_display_values();
     return ADE7880_STATUS_OK;
 }
 
