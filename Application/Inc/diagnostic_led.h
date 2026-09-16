@@ -1,0 +1,51 @@
+/**
+ * @file diagnostic_led.h
+ * @brief Non-blocking two-LED run and fault indicator.
+ */
+#ifndef DIAGNOSTIC_LED_H
+#define DIAGNOSTIC_LED_H
+
+#include "stm32f1xx_hal.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/** Set to 0 for LEDs wired from the MCU pin through a resistor to ground. */
+#ifndef DIAGNOSTIC_LED_ACTIVE_LOW
+#define DIAGNOSTIC_LED_ACTIVE_LOW 1U
+#endif
+
+#define DIAGNOSTIC_LED_1_PORT GPIOC
+#define DIAGNOSTIC_LED_1_PIN  GPIO_PIN_13
+#define DIAGNOSTIC_LED_2_PORT GPIOC
+#define DIAGNOSTIC_LED_2_PIN  GPIO_PIN_14
+
+/** Available visual states for normal operation, testing, and fatal errors. */
+typedef enum {
+    DIAGNOSTIC_LED_MODE_OFF = 0,
+    DIAGNOSTIC_LED_MODE_HEARTBEAT,
+    DIAGNOSTIC_LED_MODE_DANCE,
+    DIAGNOSTIC_LED_MODE_ERROR
+} DiagnosticLed_Mode;
+
+/** Configure PC13/PC14 as low-speed outputs and turn both LEDs off. */
+void DiagnosticLed_Init(void);
+
+/** Advance the selected pattern using HAL_GetTick() without blocking. */
+void DiagnosticLed_Process(void);
+
+/**
+ * @brief Select a visual pattern and restart it from the first step.
+ * @param mode One value from DiagnosticLed_Mode; invalid values select OFF.
+ */
+void DiagnosticLed_SetMode(DiagnosticLed_Mode mode);
+
+/** @return The mode most recently accepted by DiagnosticLed_SetMode(). */
+DiagnosticLed_Mode DiagnosticLed_GetMode(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* DIAGNOSTIC_LED_H */

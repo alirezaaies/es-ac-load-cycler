@@ -1,0 +1,30 @@
+% !TeX program = xelatex
+% گزارش مرجع سامانه پایش و کنترل اتاق آزمون
+\documentclass[12pt,a4paper,oneside]{report}
+
+\input{report-config}
+
+\begin{document}
+
+\pagenumbering{alph}
+\input{chapters/00-title}
+\tableofcontents
+\clearpage
+\pagenumbering{arabic}
+
+\input{chapters/01-overview}
+\input{chapters/02-hardware-cubemx}
+\input{chapters/03-software-architecture}
+\input{chapters/04-drivers-and-modules}
+\input{chapters/05-runtime-control}
+\input{chapters/06-serial-protocol}
+\input{chapters/07-code-audit}
+\input{chapters/08-build-programming}
+\input{chapters/09-verification-maintenance}
+\input{chapters/10-application-function-reference}
+\input{chapters/11-driver-function-reference}
+\input{chapters/12-refactoring-details}
+\input{chapters/13-generated-code-reference}
+\input{chapters/14-diagnostic-led-test}
+
+\end{document}

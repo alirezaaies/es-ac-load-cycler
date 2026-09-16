@@ -1,0 +1,64 @@
+\chapter{ساخت، پروگرام و تولید مجدد}
+
+\section{ساخت با \lr{Keil}}
+پروژه
+\filepath{MDK-ARM/STM32F107.uvprojx}
+را باز کنید، بسته خانواده
+\lr{STM32F1}
+را در \lr{Keil} نصب کنید و هدف را بسازید. دو فایل کاربرد و ذخیره‌سازی به گروه کاربر افزوده شده‌اند. اندازه
+\lr{IROM1}
+برابر
+\lr{0x3F800}
+است و نباید به ۲۵۶ کیلوبایت کامل بازگردد. پروگرامر
+\lr{J-Link}
+از
+\lr{SWDIO, SWCLK, GND}
+و ولتاژ مرجع برد استفاده می‌کند.
+
+\section{ساخت با \lr{PlatformIO}}
+در ریشه پروژه اجرا کنید:
+\begin{LTR}
+\begin{verbatim}
+pio run
+pio run --target upload
+pio device monitor
+\end{verbatim}
+\end{LTR}
+محیط
+\lr{stm32f107vc\_jlink}
+از شناسه رسمی برد
+\lr{eval\_f107vc}
+، چارچوب \lr{STM32Cube} و \lr{J-Link} استفاده می‌کند. فایل لینک اختصاصی آخرین صفحه \lr{Flash} را رزرو می‌کند. فایل سامانه محلی از ساخت \lr{PlatformIO} کنار گذاشته می‌شود تا نسخه چارچوب و فایل پروژه هم‌زمان نماد تکراری نسازند.
+
+\section{تولید مجدد با \lr{CubeMX}}
+\begin{enumerate}
+  \item پیش از تولید، از پوشه پروژه نسخه پشتیبان یا یک \lr{commit} بسازید.
+  \item فایل
+\filepath{STM32F107.ioc}
+را باز و گزینه حفظ کد کاربر را کنترل کنید.
+  \item دوره تایمر دوم باید ۳۵۹۹ و کلاک تایمر ۷۲ مگاهرتز باشد.
+  \item کد \lr{Keil} را تولید کنید و هیچ اخطار حذف فایل را بدون بازبینی نپذیرید.
+  \item بررسی کنید فایل‌های
+\filepath{app.c}
+و
+\filepath{sensor\_address\_store.c}
+هنوز عضو پروژه \lr{Keil} باشند.
+  \item اندازه \lr{Flash} لینک \lr{Keil} را دوباره روی
+\lr{0x3F800}
+قرار دهید؛ مولد ممکن است آن را بازنویسی کند.
+  \item تفاوت‌ها را بررسی، سپس هر دو ساخت را اجرا کنید.
+\end{enumerate}
+
+\warningbox{هیچ فایل \lr{HEX} قدیمی را پس از تغییر سورس به‌عنوان نتیجه معتبر تلقی نکنید. زمان و خروجی ساخت باید با سورس همان نسخه ثبت شود.}
+
+\section{ساخت گزارش}
+از پوشه
+\filepath{docs}
+دستور زیر را دوبار اجرا کنید تا فهرست کامل شود:
+\begin{LTR}
+\begin{verbatim}
+xelatex -interaction=nonstopmode relay_on_duration_report.tex
+xelatex -interaction=nonstopmode relay_on_duration_report.tex
+\end{verbatim}
+\end{LTR}
+اگر فونت بی‌نازنین نصب باشد خودکار استفاده می‌شود و در غیر این صورت تاهوما جایگزین است. رنگ‌ها، حاشیه‌ها و فونت‌ها تنها در فایل تنظیمات متمرکز قرار دارند.

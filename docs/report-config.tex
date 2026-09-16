@@ -1,0 +1,88 @@
+% تنظیمات متمرکز قالب؛ برای تغییر ظاهر گزارش فقط این فایل را ویرایش کنید.
+\usepackage{geometry}
+\geometry{top=25mm,bottom=25mm,right=25mm,left=25mm,headheight=16pt}
+
+\usepackage{xcolor}
+\definecolor{ReportPrimary}{HTML}{173B57}
+\definecolor{ReportSecondary}{HTML}{247BA0}
+\definecolor{ReportAccent}{HTML}{D97706}
+\definecolor{ReportCodeBackground}{HTML}{F4F6F8}
+\definecolor{ReportWarning}{HTML}{9A3412}
+
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{setspace}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{fontspec}
+\usepackage{xepersian}
+
+% فونت فارسی ترجیحی بی‌نازنین است. روی سامانه‌های فاقد آن، تاهوما
+% جایگزین می‌شود تا گزارش همچنان قابل ساخت باشد.
+\IfFontExistsTF{B Nazanin}
+  {\def\PersianFontName{B Nazanin}}
+  {\def\PersianFontName{Tahoma}}
+\settextfont[Scale=1.15]{\PersianFontName}
+\setlatintextfont{Latin Modern Roman}
+\IfFontExistsTF{Source Code Pro}
+  {\setmonofont[Scale=0.88]{Source Code Pro}}
+  {\setmonofont[Scale=0.88]{Latin Modern Mono}}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=ReportPrimary,
+  urlcolor=ReportSecondary,
+  citecolor=ReportAccent,
+  pdftitle={گزارش فنی سامانه پایش و کنترل اتاق آزمون},
+  pdfauthor={گروه توسعه سامانه}
+}
+
+\titleformat{\chapter}[display]
+  {\color{ReportPrimary}\bfseries\Huge}
+  {\filleft\chaptername\ \thechapter}
+  {8pt}{\titlerule\vspace{8pt}\filright}
+\titleformat{\section}{\color{ReportPrimary}\bfseries\Large}{\thesection}{0.7em}{}
+\titleformat{\subsection}{\color{ReportSecondary}\bfseries\large}{\thesubsection}{0.7em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[R]{سامانه پایش و کنترل اتاق آزمون}
+\fancyhead[L]{\leftmark}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\setlist[itemize]{itemsep=3pt,topsep=5pt,label=$\circ$}
+\setlist[enumerate]{itemsep=3pt,topsep=5pt}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{8pt}
+\setstretch{1.45}
+\renewcommand{\arraystretch}{1.33}
+% جلوگیری از فشرده‌شدن یا کشیده‌شدن ناموزون متن در انتهای صفحه‌های پُرمحتوا
+\raggedbottom
+
+\lstdefinestyle{embeddedc}{
+  language=C,
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{ReportCodeBackground},
+  frame=single,
+  rulecolor=\color{ReportSecondary},
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  breaklines=true,
+  showstringspaces=false,
+  tabsize=4
+}
+\lstset{style=embeddedc}
+
+\newcommand{\code}[1]{\lr{\texttt{#1}}}
+\newcommand{\filepath}[1]{\lr{\path{#1}}}
+\newcommand{\warningbox}[1]{%
+  \begin{center}
+  \fcolorbox{ReportWarning}{ReportCodeBackground}{%
+    \parbox{0.91\textwidth}{\textcolor{ReportWarning}{\textbf{هشدار:}} #1}}
+  \end{center}}
