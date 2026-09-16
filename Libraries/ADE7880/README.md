@@ -67,10 +67,13 @@ window:
 - `voltage_v[n]`: converted RMS voltage when `voltage_valid[n]` is true.
 - `voltage_source[n]`: NONE, LEGACY, DERIVED, or USER calibration origin.
 - `current_a[n]`: RMS amperes when `current_valid[n]` is true.
+- `current_display[n]`: current in the selected display unit; default is 0.01 A.
 - `current_source[n]`: origin of the current conversion coefficient.
 - `active_power_w[n]`: active watts when `active_power_valid[n]` is true.
+- `active_power_display[n]`: active power in the selected display unit; default is 0.1 W.
 - `active_power_source[n]`: origin of the active-power coefficient.
 - `apparent_power_va[n]`: apparent VA when `apparent_power_valid[n]` is true.
+- `apparent_power_display[n]`: apparent power using the same default 0.1 VA unit.
 - `apparent_power_source[n]`: origin of the apparent-power coefficient.
 - `power_factor[n]`: signed PF from -1 to +1 after `power_factor_valid[n]` is true.
 - `power_factor_abs[n]`: PF magnitude from 0 to 1, independent of lead/lag sign.
@@ -101,32 +104,73 @@ marked `APP_CALIBRATION_LEGACY`. Replace every provisional value with measured
 two-point calibration before accuracy-dependent use. Phase C and neutral
 current remain invalid until explicit calibrations are supplied.
 
-## Calibrating current and power for the Watch window
+## SI values and configurable display units
 
-Record the raw value and a simultaneous trusted reference reading at two
-stable, separated, nonzero operating points. Calculate and install one pair
-for each phase and quantity:
+Calculations should always use `current_a`, `active_power_w`, and
+`apparent_power_va`. The separate display fields preserve the previous
+fixed-point convention without hiding the physical unit:
+
+- `APP_DEFAULT_CURRENT_DISPLAY_UNITS_PER_AMP = 100`: 0.01 A per display unit.
+- `APP_DEFAULT_POWER_DISPLAY_UNITS_PER_WATT = 10`: 0.1 W/VA per display unit.
+
+Thus `0.17 A` appears as `17` in `current_display`, while `23.1 W` appears as
+`231` in `active_power_display`. Change the two defaults in `app.h`, override
+them with compiler definitions, or change them at runtime:
 
 ```c
-ADE7880_LinearCalibration phase_a_current;
-
-if (ADE7880_CalculateLinearCalibration(
-        raw_at_1_a, 1.0F,
-        raw_at_5_a, 5.0F,
-        &phase_a_current) == ADE7880_STATUS_OK) {
-    (void)App_SetPhaseCalibration(APP_PHASE_QUANTITY_CURRENT_RMS,
-                                  ADE7880_PHASE_A,
-                                  &phase_a_current);
-}
+/* Show direct amperes and watts in the optional display fields. */
+(void)App_SetDisplayUnits(1.0F, 1.0F);
 ```
 
-Use the same sequence with `APP_PHASE_QUANTITY_ACTIVE_POWER` and reference
-watts, or `APP_PHASE_QUANTITY_APPARENT_POWER` and reference VA. Neutral current
-uses `App_SetNeutralCurrentCalibration()`. The values become valid on the next
-complete one-second sample. These RAM calibrations are lost at reset; after the
-coefficients are verified, load them during `App_Init()` or from nonvolatile
-memory. A lamp's printed wattage is only a nominal rating and is not a suitable
-accuracy reference.
+Changing display units never changes calibration or SI values.
+
+## Multi-point calibration
+
+The ADE7880 signal path is designed to be linear. Start with one gain/offset
+line fitted across the required range instead of unrelated low/high-range
+coefficients that can create a discontinuity. Use at least three well-separated
+points; five points give a stronger linearity check. Average multiple raw
+samples at every stable point and record the reference instrument at the same
+time.
+
+```c
+const ADE7880_CalibrationPoint phase_a_current_points[] = {
+    {raw_at_0_10_a, 0.10F},
+    {raw_at_1_00_a, 1.00F},
+    {raw_at_5_00_a, 5.00F}
+};
+ADE7880_LinearCalibration phase_a_current_result;
+float worst_current_error_a;
+
+(void)App_CalibratePhaseMultiPoint(
+    APP_PHASE_QUANTITY_CURRENT_RMS,
+    ADE7880_PHASE_A,
+    phase_a_current_points,
+    sizeof(phase_a_current_points) / sizeof(phase_a_current_points[0]),
+    &phase_a_current_result,
+    &worst_current_error_a);
+```
+
+Use `APP_PHASE_QUANTITY_VOLTAGE_RMS` with reference volts,
+`APP_PHASE_QUANTITY_ACTIVE_POWER` with reference watts, and
+`APP_PHASE_QUANTITY_APPARENT_POWER` with reference VA. The optional result
+contains the exact installed `scale` and `offset`; `worst_current_error_a`
+reports the largest residual among the supplied points. A large residual means
+that the raw/reference records, settling, phase calibration, noise, or hardware
+linearity must be investigated rather than hidden with another arbitrary gain.
+
+The calibration takes effect on the next complete sample and is stored in RAM.
+After validation at independent points, save the returned scale/offset in code
+or nonvolatile memory and reinstall it with `App_SetPhaseCalibration()` after
+every reset. A lamp's printed wattage is only nominal; use a reference meter or
+accurate source.
+
+Analog Devices recommends gain calibration for every meter. CT phase
+calibration is often needed, especially at low power factor, and offset
+calibration is useful when high accuracy is required across a large dynamic
+range. If the low-load residual remains systematic after a good multi-point
+fit, calibrate the ADE7880 RMS/power offset registers rather than adding a
+piecewise jump in application software.
 
 ## CT direction and signed power factor
 

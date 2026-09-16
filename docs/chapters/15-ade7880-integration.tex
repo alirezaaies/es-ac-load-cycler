@@ -495,40 +495,122 @@ if (ADE7880_CalculateLinearCalibration(
 
 \textbf{هشدار ایمنی:} ثانویه \lr{CT} در حالی که جریان از اولیه عبور می‌کند هرگز باز نشود؛ امکان ایجاد ولتاژ خطرناک وجود دارد. تغییر سیم‌بندی فقط پس از بی‌برق‌کردن اولیه یا با روش اتصال‌کوتاه ایمن مورد تأیید سازنده انجام شود.
 
-\subsection{کالیبراسیون جریان و توان برای خروجی \lr{Watch}}
-در دو نقطه پایدار و جدا از هم، شمار خام و مقدار هم‌زمان ابزار مرجع ثبت شود. برای جریان فاز \lr{A} نمونه کد زیر قابل استفاده است:
+\subsection{واحد مهندسی و نمایش سازگار با برنامه قدیمی}
+برای جلوگیری از ابهام، فیلدهای محاسباتی همیشه واحد مهندسی صریح دارند:
 
-\Needspace{14\baselineskip}
-\begin{LTR}
-\begin{lstlisting}[language=C]
-ADE7880_LinearCalibration phase_a_current;
+\begin{itemize}
+  \item \lr{current\_a}: آمپر؛
+  \item \lr{active\_power\_w}: وات؛
+  \item \lr{apparent\_power\_va}: ولت‌آمپر.
+\end{itemize}
 
-if (ADE7880_CalculateLinearCalibration(
-        raw_at_1_a, 1.0F,
-        raw_at_5_a, 5.0F,
-        &phase_a_current) == ADE7880_STATUS_OK) {
-    (void)App_SetPhaseCalibration(
-        APP_PHASE_QUANTITY_CURRENT_RMS,
-        ADE7880_PHASE_A,
-        &phase_a_current);
-}
-\end{lstlisting}
-\end{LTR}
+سه فیلد مستقل زیر فقط برای نمایش و پروتکل‌های \lr{fixed-point} در نظر گرفته شده‌اند:
 
-برای توان اکتیو و ظاهری همین الگو به‌ترتیب با ثابت‌های زیر تکرار می‌شود:
+\begin{itemize}
+  \item \lr{current\_display}: پیش‌فرض صدم آمپر؛ بنابراین \lr{0.17 A} به‌شکل \lr{17} دیده می‌شود؛
+  \item \lr{active\_power\_display}: پیش‌فرض دهم وات؛ بنابراین \lr{23.1 W} به‌شکل \lr{231} دیده می‌شود؛
+  \item \lr{apparent\_power\_display}: پیش‌فرض دهم ولت‌آمپر.
+\end{itemize}
+
+دو ثابت زیر در \lr{app.h} پیش‌فرض را مشخص می‌کنند؛ مقدارهای آن‌ها به‌ترتیب ۱۰۰ و ۱۰ هستند:
 
 \begin{LTR}
 \begin{lstlisting}
-APP_PHASE_QUANTITY_ACTIVE_POWER
-APP_PHASE_QUANTITY_APPARENT_POWER
+APP_DEFAULT_CURRENT_DISPLAY_UNITS_PER_AMP
+APP_DEFAULT_POWER_DISPLAY_UNITS_PER_WATT
 \end{lstlisting}
 \end{LTR}
 
-جریان نول با
-\lr{App\_SetNeutralCurrentCalibration}
-تنظیم می‌شود. ضریب‌ها فعلاً در \lr{RAM} هستند و پس از \lr{reset} از بین می‌روند؛ پس از تأیید نقطه سوم باید در آغاز برنامه یا حافظه غیرفرار بارگذاری شوند.
+تغییر موقت در زمان اجرا نیز بدون دست‌زدن به کالیبراسیون ممکن است:
 
-توان نوشته‌شده روی بدنه لامپ فقط مقدار نامی است و جای وات‌متر یا منبع کالیبره را نمی‌گیرد. برای نتیجه قابل اعتماد، ولتاژ، جریان، وات و \lr{PF} مرجع باید هم‌زمان با داده خام ثبت شوند. راهنمای رسمی \lr{AN-1171} نیز کالیبراسیون \lr{gain} را برای هر دستگاه لازم می‌داند و برای \lr{RMS} استفاده از رجیسترهای لحظه‌ای و ثابت‌های \lr{A/LSB} و \lr{V/LSB} اندازه‌گیری‌شده را توصیه می‌کند.
+\begin{LTR}
+\begin{lstlisting}[language=C]
+/* Make optional display fields use direct A and W units. */
+(void)App_SetDisplayUnits(1.0F, 1.0F);
+\end{lstlisting}
+\end{LTR}
+
+\subsection{تصمیم کالیبراسیون: یک خط چندنقطه‌ای، نه ضرایب قطعه‌ای}
+مسیر اندازه‌گیری \lr{ADE7880} ذاتاً خطی طراحی شده است. قرار دادن یک ضریب برای بار کم و ضریب دیگر برای بار زیاد می‌تواند در مرز دو بازه پرش بسازد و عیب واقعی \lr{offset}، نویز یا خطای فاز را پنهان کند. روش نخست این پروژه یک رابطه
+\lr{engineering = raw * scale + offset}
+است که با کمترین‌مربعات روی همه نقاط ثبت‌شده برازش می‌شود. حداقل دو نقطه لازم است، سه نقطه برای کم/میانی/زیاد حداقل عملی و پنج نقطه برای ارزیابی بهتر خطی‌بودن توصیه می‌شود.
+
+راهنمای رسمی \lr{AN-1171} حداکثر سه مرحله متفاوت را معرفی می‌کند: \lr{gain}، \lr{phase} و \lr{offset}. این عبارت به معنی سه ضریب قطعه‌ای نیست. \lr{gain} برای هر دستگاه لازم است؛ اصلاح فاز برای \lr{CT}، به‌خصوص در ضریب توان پایین، اغلب لازم است؛ و \lr{offset} وقتی دقت زیاد در دامنه دینامیکی وسیع خواسته شود اهمیت پیدا می‌کند. اگر پس از برازش خطی، خطای کم‌بار همچنان سیستماتیک باشد، باید رجیسترهای \lr{xIRMSOS/xVRMSOS/xWATTOS} تراشه ارزیابی شوند.
+
+\subsection{انتخاب نقاط و برداشت داده}
+در هر نقطه، پس از زمان نشست، دست‌کم ۲۰ تا ۶۰ نمونه خام ثبت و میانگین شوند. ابزار مرجع باید هم‌زمان خوانده شود. صفر کامل برای کالیبراسیون \lr{RMS} مناسب نیست؛ راهنمای تراشه نیز \lr{offset} را با یک سیگنال کم ولی غیرصفر اندازه می‌گیرد.
+
+\begin{longtable}{p{0.25\textwidth}p{0.62\textwidth}}
+\toprule
+کمیت & نقاط پیشنهادی \\
+\midrule
+\endhead
+ولتاژ \lr{RMS} & پایین، نامی و بالای بازه واقعی؛ برای شبکه ۲۳۰ ولت، در صورت پشتیبانی منبع مثلاً ۱۸۰، ۲۳۰ و ۲۵۰ ولت. \\
+جریان \lr{RMS} & کمترین جریان موردنیازِ معتبر، یک نقطه میانی و ۸۰ تا ۱۰۰ درصد جریان نامی طراحی؛ از حد مجاز \lr{CT/burden/ADE} عبور نشود. \\
+توان اکتیو & بارهای مرجع کم، میانی و زیاد با ولتاژ پایدار و \lr{PF} معلوم؛ برای \lr{gain} ساده، بار مقاومتی نزدیک \lr{PF=1}. \\
+توان ظاهری & هم‌زمان از ولتاژ و جریان مرجع یا پاورآنالایزر معتبر ثبت شود؛ صرف حاصل‌ضرب مقادیر نامطمئن استفاده نشود. \\
+\bottomrule
+\end{longtable}
+
+برای بررسی خطای فاز \lr{CT} یک آزمون جدا با بار پایدار نزدیک \lr{PF=0.5} لازم است. نقاط برازش بهتر است کل بازه کاری را بپوشانند، ولی یک یا دو نقطه اضافی باید فقط برای اعتبارسنجی نگه داشته شوند و وارد برازش نشوند.
+
+\subsection{کد کالیبراسیون ولتاژ، جریان و توان}
+در نمونه زیر نام‌های \lr{raw\_...} میانگین شمارهای ثبت‌شده از
+\lr{g\_app\_electrical.raw.phase[0]}
+هستند و اعداد ستون دوم مقدار هم‌زمان ابزار مرجع در واحد مهندسی هستند:
+
+\Needspace{26\baselineskip}
+\begin{LTR}
+\begin{lstlisting}[language=C]
+const ADE7880_CalibrationPoint voltage_points[] = {
+    {raw_v_180, 180.0F}, {raw_v_230, 230.0F},
+    {raw_v_250, 250.0F}
+};
+const ADE7880_CalibrationPoint current_points[] = {
+    {raw_i_0_10, 0.10F}, {raw_i_1_00, 1.00F},
+    {raw_i_5_00, 5.00F}
+};
+const ADE7880_CalibrationPoint power_points[] = {
+    {raw_p_20, 20.0F}, {raw_p_200, 200.0F},
+    {raw_p_1000, 1000.0F}
+};
+ADE7880_LinearCalibration voltage_result;
+ADE7880_LinearCalibration current_result;
+ADE7880_LinearCalibration power_result;
+float voltage_max_error_v;
+float current_max_error_a;
+float power_max_error_w;
+
+(void)App_CalibratePhaseMultiPoint(
+    APP_PHASE_QUANTITY_VOLTAGE_RMS, ADE7880_PHASE_A,
+    voltage_points, 3U, &voltage_result, &voltage_max_error_v);
+(void)App_CalibratePhaseMultiPoint(
+    APP_PHASE_QUANTITY_CURRENT_RMS, ADE7880_PHASE_A,
+    current_points, 3U, &current_result, &current_max_error_a);
+(void)App_CalibratePhaseMultiPoint(
+    APP_PHASE_QUANTITY_ACTIVE_POWER, ADE7880_PHASE_A,
+    power_points, 3U, &power_result, &power_max_error_w);
+\end{lstlisting}
+\end{LTR}
+
+سه مقدار \lr{max\_error} بیشترین فاصله نقاط ورودی از خط برازش‌شده را به‌ترتیب برحسب ولت، آمپر و وات نشان می‌دهند. کوچک‌بودن آن‌ها کافی نیست؛ خروجی باید در نقاط مستقل نیز با مرجع مقایسه شود. برای \lr{CT} معکوس، مقدار مرجع همچنان خروجی نهایی مطلوب است و تابع کاربردی علامت ضریب توان اکتیو را با تنظیم \lr{current\_polarity} هماهنگ می‌کند.
+
+نتیجه نصب‌شده تا \lr{reset} در \lr{RAM} است. پس از تأیید، اعضای \lr{scale/offset} ساختارهای نتیجه در \lr{Watch} یادداشت و در \lr{Flash} یا تنظیمات \lr{startup} ذخیره شوند. نمونه بارگذاری ثابت تأییدشده:
+
+\begin{LTR}
+\begin{lstlisting}[language=C]
+static const ADE7880_LinearCalibration saved_power_a = {
+    .scale = VERIFIED_POWER_A_SCALE,
+    .offset = VERIFIED_POWER_A_OFFSET
+};
+
+(void)App_SetPhaseCalibration(
+    APP_PHASE_QUANTITY_ACTIVE_POWER,
+    ADE7880_PHASE_A, &saved_power_a);
+\end{lstlisting}
+\end{LTR}
+
+توان نوشته‌شده روی بدنه لامپ فقط مقدار نامی است و جای وات‌متر یا منبع کالیبره را نمی‌گیرد. ترتیب حرفه‌ای پیشنهادی این است: جهت \lr{CT}، بررسی فاز، کالیبراسیون \lr{gain} چندنقطه‌ای، ارزیابی نقطه‌های مستقل، و فقط در صورت باقی‌ماندن خطای کم‌بار، اصلاح \lr{offset} خود تراشه.
 
 \section{آزمون سخت‌افزاری مرحله‌به‌مرحله}
 به علت اتصال ورودی‌های \lr{ADE7880} به برق شهر، این آزمون فقط با ایزولاسیون مناسب، منبع محدودشده و فرد آگاه به ایمنی برق انجام شود. اتصال مستقیم اسیلوسکوپ یا دیباگر زمین‌شده به بخش غیرایزوله می‌تواند خطرناک و مخرب باشد.
@@ -582,7 +664,7 @@ APP_PHASE_QUANTITY_APPARENT_POWER
 \lr{framework-stm32cubef1 1.8.7}
 با گزینه‌های
 \lr{-Wall -Wextra -Werror}
-موفق شد. خروجی ۱۰۰۹۲ بایت \lr{Flash} و ۵۰۰ بایت \lr{RAM} مصرف کرد. ساخت دوم با \lr{Keil} و \lr{Arm Compiler 6.24} نیز با \lr{0 Error(s), 0 Warning(s)} پایان یافت و اندازه‌های \lr{Code=9732}، \lr{RO-data=476}، \lr{RW-data=12} و \lr{ZI-data=1468} بایت را گزارش کرد. فایل‌های اجرایی هر دو زنجیره‌ابزار تولید شدند. کاربر برقراری ارتباط، دیباگ \lr{Keil}، مشاهده ولتاژ و پاسخ جریان/توان یک بار لامپی روی برد واقعی را گزارش کرد. همین تست قالب ثابت قدیمی را مشخص کرد و تبدیل خروجی به آمپر و وات اصلاح شد؛ دقت نهایی همچنان باید با آمپرمتر و وات‌متر مرجع کنترل و ضرایب قدیمی با کالیبراسیون کاربر جایگزین شوند.
+موفق شد. خروجی ۱۰۲۵۲ بایت \lr{Flash} و ۵۴۴ بایت \lr{RAM} مصرف کرد. ساخت دوم با \lr{Keil} و \lr{Arm Compiler 6.24} نیز با \lr{0 Error(s), 0 Warning(s)} پایان یافت و اندازه‌های \lr{Code=9828}، \lr{RO-data=476}، \lr{RW-data=12} و \lr{ZI-data=1532} بایت را گزارش کرد. فایل‌های اجرایی هر دو زنجیره‌ابزار تولید شدند. کاربر برقراری ارتباط، دیباگ \lr{Keil}، مشاهده ولتاژ و پاسخ جریان/توان یک بار لامپی روی برد واقعی را گزارش کرد. همین تست قالب ثابت قدیمی را مشخص کرد؛ خروجی نمایشی سازگار با واحدهای قدیمی حفظ و \lr{API} کالیبراسیون چندنقطه‌ای برای ولتاژ، جریان و توان افزوده شد. دقت نهایی باید با ابزار مرجع و نقاط مستقل کنترل شود.
 
 \section{چک‌لیست پذیرش این قابلیت}
 این مرحله زمانی از نظر سخت‌افزاری پذیرفته می‌شود که همه موارد زیر ثبت شوند:
