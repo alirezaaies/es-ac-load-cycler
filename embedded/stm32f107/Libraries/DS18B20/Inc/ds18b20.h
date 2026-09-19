@@ -48,7 +48,13 @@ DS18B20_Status DS18B20_StartConversion(const OneWire_Bus *bus,
 /** @brief Poll conversion. @param bus Target. @return true when complete. */
 bool DS18B20_IsConversionReady(const OneWire_Bus *bus);
 
-/** @brief Read and verify scratchpad. @param bus Target. @param rom Sensor ROM. @param scratchpad Output. @return Status. */
+/**
+ * @brief Read and verify a scratchpad.
+ * @param bus Target bus.
+ * @param rom Sensor ROM, or NULL when exactly one sensor is on the bus.
+ * @param scratchpad Nine-byte output, updated before CRC status is returned.
+ * @return Operation status.
+ */
 DS18B20_Status DS18B20_ReadScratchpad(
     const OneWire_Bus *bus,
     const uint8_t rom[DS18B20_ROM_SIZE],
@@ -78,6 +84,7 @@ uint16_t DS18B20_GetConversionTimeMs(DS18B20_Resolution resolution);
 
 /**
  * @brief Portable blocking convenience read.
+ * @param rom Sensor ROM, or NULL when exactly one sensor is on the bus.
  * @param timeout_ms Maximum wait; use at least 750 ms for unknown resolution.
  * @param temperature_c Updated only after a valid scratchpad CRC.
  * @return Operation status.

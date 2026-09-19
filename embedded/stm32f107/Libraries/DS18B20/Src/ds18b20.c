@@ -83,7 +83,8 @@ DS18B20_Status DS18B20_ReadScratchpad(
     const uint8_t rom[DS18B20_ROM_SIZE],
     uint8_t scratchpad[DS18B20_SCRATCHPAD_SIZE])
 {
-    if (!OneWire_IsValid(bus) || !DS18B20_IsValidRom(rom) ||
+    if (!OneWire_IsValid(bus) ||
+        ((rom != NULL) && !DS18B20_IsValidRom(rom)) ||
         (scratchpad == NULL)) {
         return DS18B20_STATUS_INVALID_ARGUMENT;
     }
@@ -170,7 +171,8 @@ DS18B20_Status DS18B20_ReadTemperatureBlocking(
     uint8_t scratchpad[DS18B20_SCRATCHPAD_SIZE];
     DS18B20_Status status;
 
-    if (!OneWire_IsValid(bus) || !DS18B20_IsValidRom(rom) ||
+    if (!OneWire_IsValid(bus) ||
+        ((rom != NULL) && !DS18B20_IsValidRom(rom)) ||
         (timeout_ms == 0U) || (temperature_c == NULL)) {
         return DS18B20_STATUS_INVALID_ARGUMENT;
     }

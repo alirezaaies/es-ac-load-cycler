@@ -120,11 +120,9 @@ static DS18B20_ManagerStatus assign_rom(DS18B20_Manager *manager,
     return DS18B20_MANAGER_STATUS_OK;
 }
 
+/** Replace only a one-missing/one-new pair; ambiguous cases remain untouched. */
 static DS18B20_ManagerStatus auto_replace(DS18B20_Manager *manager)
 {
-    if (!manager->config.auto_replace_unambiguous) {
-        return DS18B20_MANAGER_STATUS_OK;
-    }
     for (uint8_t bus = 0U; bus < manager->config.bus_count; ++bus) {
         uint8_t missing_count = 0U;
         uint8_t missing_slot = 0U;
@@ -159,13 +157,9 @@ static DS18B20_ManagerStatus auto_replace(DS18B20_Manager *manager)
     return DS18B20_MANAGER_STATUS_OK;
 }
 
-/** Assign every new ROM to the first free logical slot, in sorted order. */
+/** Assign every remaining new ROM to the first free slot, in sorted order. */
 static DS18B20_ManagerStatus auto_assign_new(DS18B20_Manager *manager)
 {
-    if (!manager->config.auto_assign_new) {
-        return DS18B20_MANAGER_STATUS_OK;
-    }
-
     for (uint8_t found = 0U; found < manager->discovered_count; ++found) {
         uint8_t free_slot = DS18B20_MANAGER_UNASSIGNED_SLOT;
 
@@ -211,8 +205,7 @@ DS18B20_ManagerStatus DS18B20_ManagerInit(
         (configuration->sensor_count > DS18B20_MANAGER_MAX_SENSORS) ||
         (configuration->get_time_ms == NULL) ||
         (configuration->sample_interval_ms == 0U) ||
-        (configuration->discovery_interval_ms == 0U) ||
-        (configuration->conversion_time_ms == 0U)) {
+        (configuration->discovery_interval_ms == 0U)) {
         return DS18B20_MANAGER_STATUS_INVALID_ARGUMENT;
     }
     for (uint8_t bus = 0U; bus < configuration->bus_count; ++bus) {
@@ -388,14 +381,15 @@ static void start_conversions(DS18B20_Manager *manager, uint32_t now)
     }
     if (started) {
         manager->phase = DS18B20_MANAGER_CONVERTING;
+        /* Power-on resolution is 12 bit, so the safe wait is always 750 ms. */
         manager->conversion_deadline_ms =
-            now + manager->config.conversion_time_ms;
+            now + DS18B20_GetConversionTimeMs(DS18B20_RESOLUTION_12_BIT);
     } else {
         manager->next_sample_ms = now + manager->config.sample_interval_ms;
     }
 }
 
-static void read_one_slot(DS18B20_Manager *manager, uint32_t now)
+static bool read_one_slot(DS18B20_Manager *manager, uint32_t now)
 {
     while (manager->read_index < manager->config.sensor_count) {
         DS18B20_SensorSlot *slot = &manager->slots[manager->read_index++];
@@ -408,7 +402,7 @@ static void read_one_slot(DS18B20_Manager *manager, uint32_t now)
             slot->valid = false;
             slot->last_status = DS18B20_STATUS_NO_DEVICE;
             ++slot->failed_reads;
-            return;
+            return true;
         }
 
         slot->last_status = DS18B20_ReadScratchpad(
@@ -433,19 +427,20 @@ static void read_one_slot(DS18B20_Manager *manager, uint32_t now)
             slot->valid = false;
             ++slot->failed_reads;
         }
-        return;
+        return true;
     }
 
     manager->phase = DS18B20_MANAGER_IDLE;
     manager->next_sample_ms = now + manager->config.sample_interval_ms;
+    return false;
 }
 
-void DS18B20_ManagerProcess(DS18B20_Manager *manager)
+bool DS18B20_ManagerProcess(DS18B20_Manager *manager)
 {
     uint32_t now;
 
     if ((manager == NULL) || (manager->config.get_time_ms == NULL)) {
-        return;
+        return false;
     }
     now = manager->config.get_time_ms(manager->config.time_context);
     if ((manager->phase == DS18B20_MANAGER_IDLE) &&
@@ -453,12 +448,12 @@ void DS18B20_ManagerProcess(DS18B20_Manager *manager)
         (void)DS18B20_ManagerDiscover(manager);
         manager->next_discovery_ms =
             now + manager->config.discovery_interval_ms;
-        return;
+        return true;
     }
     if ((manager->phase == DS18B20_MANAGER_IDLE) &&
         deadline_reached(now, manager->next_sample_ms)) {
         start_conversions(manager, now);
-        return;
+        return false;
     }
     if ((manager->phase == DS18B20_MANAGER_CONVERTING) &&
         deadline_reached(now, manager->conversion_deadline_ms)) {
@@ -466,6 +461,7 @@ void DS18B20_ManagerProcess(DS18B20_Manager *manager)
         manager->read_index = 0U;
     }
     if (manager->phase == DS18B20_MANAGER_READING) {
-        read_one_slot(manager, now);
+        return read_one_slot(manager, now);
     }
+    return false;
 }

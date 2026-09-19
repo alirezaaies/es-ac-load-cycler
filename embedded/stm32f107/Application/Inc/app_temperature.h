@@ -8,8 +8,6 @@
 #ifndef APP_TEMPERATURE_H
 #define APP_TEMPERATURE_H
 
-#include "ds18b20_manager.h"
-
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -19,13 +17,20 @@
 extern "C" {
 #endif
 
-/** Celsius values; index 0 is sensor 1, index 1 is sensor 2, and so on. */
+/**
+ * @brief Latest Celsius values for the numbered sensors.
+ *
+ * Index 0 is sensor 1. Read an element only when the matching validity flag
+ * is true. Invalid elements are set to 0.0F to avoid exposing stale data.
+ */
 extern volatile float g_temperature_c[APP_TEMPERATURE_SENSOR_COUNT];
 
-/** A value may be used only when the matching element is true. */
+/** @brief Validity flags corresponding one-to-one with g_temperature_c. */
 extern volatile bool g_temperature_valid[APP_TEMPERATURE_SENSOR_COUNT];
 
-/** Number of sensor identities registered automatically in persistent slots. */
+/**
+ * @brief Number of persistent sensor identities, including absent sensors.
+ */
 extern volatile uint8_t g_temperature_sensor_count;
 
 /**
@@ -35,16 +40,6 @@ extern volatile uint8_t g_temperature_sensor_count;
  * @return true when the output was updated, otherwise false.
  */
 bool App_TemperatureGetCelsius(uint8_t sensor_number, float *temperature_c);
-
-/* The items below are for diagnostics or production tools, not normal use. */
-extern DS18B20_Manager g_app_temperature;
-DS18B20_ManagerStatus App_TemperatureDiscover(void);
-DS18B20_ManagerStatus App_TemperatureAssignDiscovered(
-    uint8_t logical_number, uint8_t discovery_index);
-DS18B20_ManagerStatus App_TemperatureAssignRom(
-    uint8_t logical_number, uint8_t bus_index,
-    const uint8_t rom[DS18B20_ROM_SIZE]);
-DS18B20_ManagerStatus App_TemperatureClear(uint8_t logical_number);
 
 #ifdef __cplusplus
 }

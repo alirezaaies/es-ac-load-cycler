@@ -5,6 +5,7 @@
 #include "app.h"
 
 #include "diagnostic_led.h"
+#include "ds18b20_manager.h"
 #include "main.h"
 #include "sensor_address_store.h"
 
@@ -17,13 +18,12 @@
 #define TEMPERATURE_BUS_COUNT 2U
 #define TEMPERATURE_SAMPLE_INTERVAL_MS 250U
 #define TEMPERATURE_DISCOVERY_INTERVAL_MS 5000U
-#define TEMPERATURE_CONVERSION_TIME_MS 750U
 
 /** Public live state; inspect this symbol in the debugger Watch window. */
 volatile App_ElectricalState g_app_electrical;
 
 /** Public numbered temperature state; inspect this symbol in debugger Watch. */
-DS18B20_Manager g_app_temperature;
+static DS18B20_Manager temperature_manager;
 volatile float g_temperature_c[APP_TEMPERATURE_SENSOR_COUNT];
 volatile bool g_temperature_valid[APP_TEMPERATURE_SENSOR_COUNT];
 volatile uint8_t g_temperature_sensor_count;
@@ -46,7 +46,7 @@ static void publish_temperature_values(void)
     uint8_t assigned_count = 0U;
 
     for (uint8_t index = 0U; index < APP_TEMPERATURE_SENSOR_COUNT; ++index) {
-        const DS18B20_SensorSlot *slot = &g_app_temperature.slots[index];
+        const DS18B20_SensorSlot *slot = &temperature_manager.slots[index];
         const bool assigned = slot->mapping.assigned == 1U;
         const bool usable = assigned && slot->present && slot->valid;
 
@@ -388,14 +388,11 @@ static void initialize_temperature_manager(void)
     manager_config.sample_interval_ms = TEMPERATURE_SAMPLE_INTERVAL_MS;
     manager_config.discovery_interval_ms =
         TEMPERATURE_DISCOVERY_INTERVAL_MS;
-    manager_config.conversion_time_ms = TEMPERATURE_CONVERSION_TIME_MS;
-    manager_config.auto_assign_new = true;
-    manager_config.auto_replace_unambiguous = true;
     manager_config.get_time_ms = temperature_time_ms;
     manager_config.load_mappings = temperature_load_mappings;
     manager_config.save_mappings = temperature_save_mappings;
     temperature_manager_ready =
-        DS18B20_ManagerInit(&g_app_temperature, &manager_config) ==
+        DS18B20_ManagerInit(&temperature_manager, &manager_config) ==
         DS18B20_MANAGER_STATUS_OK;
     publish_temperature_values();
 }
@@ -472,8 +469,9 @@ void App_Process(void)
 
     DiagnosticLed_Process();
     if (temperature_manager_ready) {
-        DS18B20_ManagerProcess(&g_app_temperature);
-        publish_temperature_values();
+        if (DS18B20_ManagerProcess(&temperature_manager)) {
+            publish_temperature_values();
+        }
     }
     if (ade_spi_handle == NULL) {
         return;
@@ -520,39 +518,6 @@ bool App_TemperatureGetCelsius(uint8_t sensor_number, float *temperature_c)
     }
     *temperature_c = g_temperature_c[index];
     return true;
-}
-
-DS18B20_ManagerStatus App_TemperatureDiscover(void)
-{
-    return temperature_manager_ready
-               ? DS18B20_ManagerDiscover(&g_app_temperature)
-               : DS18B20_MANAGER_STATUS_INVALID_ARGUMENT;
-}
-
-DS18B20_ManagerStatus App_TemperatureAssignDiscovered(
-    uint8_t logical_number, uint8_t discovery_index)
-{
-    return temperature_manager_ready
-               ? DS18B20_ManagerAssignDiscovered(
-                     &g_app_temperature, logical_number, discovery_index)
-               : DS18B20_MANAGER_STATUS_INVALID_ARGUMENT;
-}
-
-DS18B20_ManagerStatus App_TemperatureAssignRom(
-    uint8_t logical_number, uint8_t bus_index,
-    const uint8_t rom[DS18B20_ROM_SIZE])
-{
-    return temperature_manager_ready
-               ? DS18B20_ManagerAssignRom(&g_app_temperature,
-                                           logical_number, bus_index, rom)
-               : DS18B20_MANAGER_STATUS_INVALID_ARGUMENT;
-}
-
-DS18B20_ManagerStatus App_TemperatureClear(uint8_t logical_number)
-{
-    return temperature_manager_ready
-               ? DS18B20_ManagerClear(&g_app_temperature, logical_number)
-               : DS18B20_MANAGER_STATUS_INVALID_ARGUMENT;
 }
 
 /** Install a measured voltage calibration for one phase. */

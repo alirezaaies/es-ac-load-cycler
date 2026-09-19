@@ -31,7 +31,6 @@ typedef enum {
     DS18B20_MANAGER_STATUS_OK = 0,
     DS18B20_MANAGER_STATUS_INVALID_ARGUMENT,
     DS18B20_MANAGER_STATUS_BUSY,
-    DS18B20_MANAGER_STATUS_NOT_FOUND,
     DS18B20_MANAGER_STATUS_DUPLICATE,
     DS18B20_MANAGER_STATUS_STORAGE_ERROR,
     DS18B20_MANAGER_STATUS_CAPACITY_EXCEEDED
@@ -78,19 +77,16 @@ typedef bool (*DS18B20_ManagerSaveMappings)(
     void *context, const DS18B20_MappingEntry *entries, uint8_t entry_count);
 
 typedef struct {
-    OneWire_Bus *buses;
-    uint8_t bus_count;
-    uint8_t sensor_count;
-    uint32_t sample_interval_ms;
-    uint32_t discovery_interval_ms;
-    uint16_t conversion_time_ms;
-    bool auto_assign_new;
-    bool auto_replace_unambiguous;
+    const OneWire_Bus *buses; /**< Initialized buses; kept by reference. */
+    uint8_t bus_count; /**< Number of entries in buses. */
+    uint8_t sensor_count; /**< Logical slots to use, from 1 to MAX_SENSORS. */
+    uint32_t sample_interval_ms; /**< Delay after one complete read cycle. */
+    uint32_t discovery_interval_ms; /**< Delay between ROM searches. */
     void *time_context;
-    DS18B20_ManagerGetTimeMs get_time_ms;
+    DS18B20_ManagerGetTimeMs get_time_ms; /**< Required monotonic tick. */
     void *storage_context;
-    DS18B20_ManagerLoadMappings load_mappings;
-    DS18B20_ManagerSaveMappings save_mappings;
+    DS18B20_ManagerLoadMappings load_mappings; /**< Optional persistence. */
+    DS18B20_ManagerSaveMappings save_mappings; /**< Optional persistence. */
 } DS18B20_ManagerConfig;
 
 /** Complete manager state; intentionally debugger-friendly and allocation-free. */
@@ -114,7 +110,16 @@ typedef struct {
     uint32_t automatic_replacements;
 } DS18B20_Manager;
 
-/** @brief Initialize and load mappings. @param manager Destination. @param configuration Buses, timing, and callbacks. @return Status. */
+/**
+ * @brief Initialize the automatic manager and load saved identities.
+ * @param manager Caller-owned state that remains valid for the lifetime of use.
+ * @param configuration Buses, timing, clock, and optional storage callbacks.
+ * @return DS18B20_MANAGER_STATUS_OK, or INVALID_ARGUMENT.
+ *
+ * New ROMs always take the first free logical number. When exactly one saved
+ * sensor is missing and one new ROM is present on that bus, replacement is
+ * automatic. These safe defaults intentionally require no mode flags.
+ */
 DS18B20_ManagerStatus DS18B20_ManagerInit(
     DS18B20_Manager *manager, const DS18B20_ManagerConfig *configuration);
 
@@ -141,8 +146,15 @@ DS18B20_ManagerStatus DS18B20_ManagerAssignRom(
 DS18B20_ManagerStatus DS18B20_ManagerClear(
     DS18B20_Manager *manager, uint8_t logical_number);
 
-/** @brief Service discovery, conversion, and one read. @param manager Instance. */
-void DS18B20_ManagerProcess(DS18B20_Manager *manager);
+/**
+ * @brief Service discovery, conversion, and at most one sensor read.
+ * @param manager Initialized instance.
+ * @return true only when discovery or a public sensor slot changed.
+ *
+ * Call this continuously from the main loop. The return value lets adapters
+ * update a user-facing view only when new information exists.
+ */
+bool DS18B20_ManagerProcess(DS18B20_Manager *manager);
 
 #ifdef __cplusplus
 }
