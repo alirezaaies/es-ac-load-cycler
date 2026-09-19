@@ -12,8 +12,11 @@
 
 ## فریم‌ور
 
-راهنمای ساخت، پروگرام، دیباگ ADE7880 و کالیبراسیون در
+راهنمای ساخت، پروگرام، دیباگ ADE7880، شماره‌گذاری پایدار DS18B20 و کالیبراسیون در
 [`embedded/stm32f107/README.md`](embedded/stm32f107/README.md) قرار دارد.
+
+راهنمای مستقل زیرسامانه دما، شامل سیم‌بندی `PB10/PC7`، معرفی شماره‌ها، تعویض سنسور و انتقال کتابخانه به میکروکنترلر دیگر، در
+[`embedded/stm32f107/Libraries/DS18B20Manager/README.md`](embedded/stm32f107/Libraries/DS18B20Manager/README.md) است.
 
 ساخت با PlatformIO:
 

@@ -10,17 +10,28 @@
 #define STORE_PAGE_ADDRESS   0x0803F800UL
 #define STORE_LEGACY_ADDRESS 0x08009000UL
 #define STORE_MAGIC          0x524F4D53UL
-#define STORE_VERSION        1U
+#define STORE_VERSION        2U
+
+typedef struct {
+    uint32_t magic;
+    uint16_t version;
+    uint16_t payload_size;
+    uint8_t payload[SENSOR_ADDRESS_STORE_MAX_PAYLOAD];
+    uint32_t crc32;
+} SensorAddressRecord;
 
 typedef struct {
     uint32_t magic;
     uint16_t version;
     uint16_t count;
-    uint8_t addresses[SENSOR_ADDRESS_STORE_COUNT][SENSOR_ADDRESS_STORE_ROM_SIZE];
+    uint8_t addresses[SENSOR_ADDRESS_STORE_LEGACY_COUNT]
+                     [SENSOR_ADDRESS_STORE_ROM_SIZE];
     uint32_t crc32;
-} SensorAddressRecord;
+} LegacyAddressRecord;
 
-/** Reflected IEEE CRC32 protects metadata and all 32 addresses as one unit. */
+/** Static to keep the 524-byte Flash image off the small embedded stack. */
+static SensorAddressRecord write_record;
+
 static uint32_t crc32(const uint8_t *data, uint32_t length)
 {
     uint32_t crc = 0xFFFFFFFFUL;
@@ -35,78 +46,61 @@ static uint32_t crc32(const uint8_t *data, uint32_t length)
     return ~crc;
 }
 
-bool SensorAddressStore_IsValidRom(
-    const uint8_t address[SENSOR_ADDRESS_STORE_ROM_SIZE])
+static bool valid_rom(const uint8_t *rom)
 {
-    return (address != NULL) && (address[0] == 0x28U) &&
-           (OneWire_Crc8(address, SENSOR_ADDRESS_STORE_ROM_SIZE - 1U) ==
-            address[SENSOR_ADDRESS_STORE_ROM_SIZE - 1U]);
+    return (rom[0] == 0x28U) &&
+           (OneWire_Crc8(rom, SENSOR_ADDRESS_STORE_ROM_SIZE - 1U) ==
+            rom[SENSOR_ADDRESS_STORE_ROM_SIZE - 1U]);
 }
 
-static bool is_valid_table(
-    const uint8_t addresses[SENSOR_ADDRESS_STORE_COUNT][SENSOR_ADDRESS_STORE_ROM_SIZE])
+static bool valid_legacy_table(
+    const uint8_t addresses[SENSOR_ADDRESS_STORE_LEGACY_COUNT]
+                           [SENSOR_ADDRESS_STORE_ROM_SIZE])
 {
-    if (addresses == NULL) {
-        return false;
-    }
-    for (uint32_t index = 0U; index < SENSOR_ADDRESS_STORE_COUNT; ++index) {
-        if (!SensorAddressStore_IsValidRom(addresses[index])) {
+    for (uint8_t index = 0U; index < SENSOR_ADDRESS_STORE_LEGACY_COUNT;
+         ++index) {
+        if (!valid_rom(addresses[index])) {
             return false;
         }
     }
     return true;
 }
 
-bool SensorAddressStore_Load(
-    uint8_t addresses[SENSOR_ADDRESS_STORE_COUNT][SENSOR_ADDRESS_STORE_ROM_SIZE])
+bool SensorAddressStore_Load(void *payload, uint16_t payload_size)
 {
     const SensorAddressRecord *record =
         (const SensorAddressRecord *)STORE_PAGE_ADDRESS;
-    const uint32_t expected_crc =
-        crc32((const uint8_t *)record,
-              sizeof(*record) - sizeof(record->crc32));
 
-    if (addresses == NULL) {
+    if ((payload == NULL) || (payload_size == 0U) ||
+        (payload_size > SENSOR_ADDRESS_STORE_MAX_PAYLOAD) ||
+        (record->magic != STORE_MAGIC) ||
+        (record->version != STORE_VERSION) ||
+        (record->payload_size != payload_size) ||
+        (record->crc32 != crc32((const uint8_t *)record,
+                                offsetof(SensorAddressRecord, crc32)))) {
         return false;
     }
-    if ((record->magic == STORE_MAGIC) &&
-        (record->version == STORE_VERSION) &&
-        (record->count == SENSOR_ADDRESS_STORE_COUNT) &&
-        (record->crc32 == expected_crc) &&
-        is_valid_table(record->addresses)) {
-        memcpy(addresses, record->addresses, sizeof(record->addresses));
-        return true;
-    }
-
-    /* Compatibility with the original raw table stored at 0x08009000. */
-    const uint8_t (*legacy)[SENSOR_ADDRESS_STORE_ROM_SIZE] =
-        (const uint8_t (*)[SENSOR_ADDRESS_STORE_ROM_SIZE])STORE_LEGACY_ADDRESS;
-    if (is_valid_table(legacy)) {
-        memcpy(addresses, legacy,
-               SENSOR_ADDRESS_STORE_COUNT * SENSOR_ADDRESS_STORE_ROM_SIZE);
-        (void)SensorAddressStore_Save(addresses);
-        return true;
-    }
-    return false;
+    memcpy(payload, record->payload, payload_size);
+    return true;
 }
 
-bool SensorAddressStore_Save(
-    const uint8_t addresses[SENSOR_ADDRESS_STORE_COUNT][SENSOR_ADDRESS_STORE_ROM_SIZE])
+bool SensorAddressStore_Save(const void *payload, uint16_t payload_size)
 {
-    SensorAddressRecord record;
     FLASH_EraseInitTypeDef erase = {0};
     uint32_t page_error = 0U;
     HAL_StatusTypeDef status;
 
-    if (!is_valid_table(addresses)) {
+    if ((payload == NULL) || (payload_size == 0U) ||
+        (payload_size > SENSOR_ADDRESS_STORE_MAX_PAYLOAD)) {
         return false;
     }
-    record.magic = STORE_MAGIC;
-    record.version = STORE_VERSION;
-    record.count = SENSOR_ADDRESS_STORE_COUNT;
-    memcpy(record.addresses, addresses, sizeof(record.addresses));
-    record.crc32 = crc32((const uint8_t *)&record,
-                         sizeof(record) - sizeof(record.crc32));
+    memset(&write_record, 0xFF, sizeof(write_record));
+    write_record.magic = STORE_MAGIC;
+    write_record.version = STORE_VERSION;
+    write_record.payload_size = payload_size;
+    memcpy(write_record.payload, payload, payload_size);
+    write_record.crc32 = crc32((const uint8_t *)&write_record,
+                         offsetof(SensorAddressRecord, crc32));
 
     status = HAL_FLASH_Unlock();
     if (status != HAL_OK) {
@@ -118,15 +112,48 @@ bool SensorAddressStore_Save(
     status = HAL_FLASHEx_Erase(&erase, &page_error);
 
     for (uint32_t offset = 0U;
-         (status == HAL_OK) && (offset < sizeof(record));
+         (status == HAL_OK) && (offset < sizeof(write_record));
          offset += sizeof(uint32_t)) {
-        uint32_t word = 0xFFFFFFFFUL;
-        const uint32_t remaining = (uint32_t)sizeof(record) - offset;
-        memcpy(&word, ((const uint8_t *)&record) + offset,
-               (remaining < sizeof(word)) ? remaining : sizeof(word));
+        uint32_t word;
+        memcpy(&word, ((const uint8_t *)&write_record) + offset,
+               sizeof(word));
         status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD,
                                    STORE_PAGE_ADDRESS + offset, word);
     }
     (void)HAL_FLASH_Lock();
-    return status == HAL_OK;
+    if (status != HAL_OK) {
+        return false;
+    }
+    return (memcmp((const void *)STORE_PAGE_ADDRESS, &write_record,
+                   sizeof(write_record)) == 0);
+}
+
+bool SensorAddressStore_LoadLegacy(
+    uint8_t addresses[SENSOR_ADDRESS_STORE_LEGACY_COUNT]
+                     [SENSOR_ADDRESS_STORE_ROM_SIZE])
+{
+    const LegacyAddressRecord *record =
+        (const LegacyAddressRecord *)STORE_PAGE_ADDRESS;
+    const uint8_t (*raw)[SENSOR_ADDRESS_STORE_ROM_SIZE] =
+        (const uint8_t (*)[SENSOR_ADDRESS_STORE_ROM_SIZE])
+            STORE_LEGACY_ADDRESS;
+
+    if (addresses == NULL) {
+        return false;
+    }
+    if ((record->magic == STORE_MAGIC) && (record->version == 1U) &&
+        (record->count == SENSOR_ADDRESS_STORE_LEGACY_COUNT) &&
+        (record->crc32 == crc32((const uint8_t *)record,
+                                offsetof(LegacyAddressRecord, crc32))) &&
+        valid_legacy_table(record->addresses)) {
+        memcpy(addresses, record->addresses, sizeof(record->addresses));
+        return true;
+    }
+    if (valid_legacy_table(raw)) {
+        memcpy(addresses, raw,
+               SENSOR_ADDRESS_STORE_LEGACY_COUNT *
+               SENSOR_ADDRESS_STORE_ROM_SIZE);
+        return true;
+    }
+    return false;
 }

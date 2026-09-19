@@ -6,6 +6,7 @@
 
 #include "diagnostic_led.h"
 #include "main.h"
+#include "sensor_address_store.h"
 
 #include <string.h>
 
@@ -13,9 +14,28 @@
 #define ADE_RESET_TIMEOUT_MS 100U /**< Bounded wait for STATUS1.RSTDONE. */
 #define ADE_SAMPLE_INTERVAL_MS 1000U /**< Normal electrical sample period. */
 #define ADE_RETRY_INTERVAL_MS 2000U /**< Delay between offline retries. */
+#define TEMPERATURE_BUS_COUNT 2U
+#define TEMPERATURE_SAMPLE_INTERVAL_MS 1000U
+#define TEMPERATURE_DISCOVERY_INTERVAL_MS 10000U
+#define TEMPERATURE_CONVERSION_TIME_MS 750U
 
 /** Public live state; inspect this symbol in the debugger Watch window. */
 volatile App_ElectricalState g_app_electrical;
+
+/** Public numbered temperature state; inspect this symbol in debugger Watch. */
+DS18B20_Manager g_app_temperature;
+
+typedef struct {
+    GPIO_TypeDef *port;
+    uint16_t pin;
+} App_OneWireGpio;
+
+static App_OneWireGpio temperature_gpio[TEMPERATURE_BUS_COUNT] = {
+    {ONE_WIRE_1_GPIO_Port, ONE_WIRE_1_Pin},
+    {ONE_WIRE_2_GPIO_Port, ONE_WIRE_2_Pin}
+};
+static OneWire_Bus temperature_buses[TEMPERATURE_BUS_COUNT];
+static bool temperature_manager_ready;
 
 /*
  * Board startup calibration, written explicitly for easy review and editing.
@@ -240,6 +260,122 @@ static void ade_delay(void *context, uint32_t delay_ms)
     HAL_Delay(delay_ms);
 }
 
+/** Drive one open-drain 1-Wire GPIO low. */
+static void one_wire_drive_low(void *context)
+{
+    const App_OneWireGpio *gpio = (const App_OneWireGpio *)context;
+    HAL_GPIO_WritePin(gpio->port, gpio->pin, GPIO_PIN_RESET);
+}
+
+/** Release one open-drain GPIO so the external resistor pulls it high. */
+static void one_wire_release(void *context)
+{
+    const App_OneWireGpio *gpio = (const App_OneWireGpio *)context;
+    HAL_GPIO_WritePin(gpio->port, gpio->pin, GPIO_PIN_SET);
+}
+
+/** Sample the physical 1-Wire level. */
+static bool one_wire_read(void *context)
+{
+    const App_OneWireGpio *gpio = (const App_OneWireGpio *)context;
+    return HAL_GPIO_ReadPin(gpio->port, gpio->pin) == GPIO_PIN_SET;
+}
+
+/** Accurate short delay backed by the Cortex-M3 cycle counter. */
+static void one_wire_delay_us(void *context, uint32_t microseconds)
+{
+    const uint32_t cycles_per_us = SystemCoreClock / 1000000U;
+    const uint32_t started = DWT->CYCCNT;
+    const uint32_t target = cycles_per_us * microseconds;
+
+    (void)context;
+    while ((DWT->CYCCNT - started) < target) {
+    }
+}
+
+/** Preserve interrupt state while one timing-sensitive slot is generated. */
+static uint32_t one_wire_enter_critical(void *context)
+{
+    const uint32_t state = __get_PRIMASK();
+    (void)context;
+    __disable_irq();
+    return state;
+}
+
+/** Restore the interrupt state captured before the 1-Wire slot. */
+static void one_wire_exit_critical(void *context, uint32_t state)
+{
+    (void)context;
+    if (state == 0U) {
+        __enable_irq();
+    }
+}
+
+static uint32_t temperature_time_ms(void *context)
+{
+    (void)context;
+    return HAL_GetTick();
+}
+
+static bool temperature_load_mappings(void *context,
+                                      DS18B20_MappingEntry *entries,
+                                      uint8_t entry_count)
+{
+    (void)context;
+    return SensorAddressStore_Load(entries,
+        (uint16_t)((uint16_t)entry_count * sizeof(*entries)));
+}
+
+static bool temperature_save_mappings(
+    void *context, const DS18B20_MappingEntry *entries, uint8_t entry_count)
+{
+    (void)context;
+    return SensorAddressStore_Save(entries,
+        (uint16_t)((uint16_t)entry_count * sizeof(*entries)));
+}
+
+/** Bind the portable manager to PB10, PC7, HAL time, and reserved Flash. */
+static void initialize_temperature_manager(void)
+{
+    DS18B20_ManagerConfig manager_config;
+
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    DWT->CYCCNT = 0U;
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+
+    for (uint8_t index = 0U; index < TEMPERATURE_BUS_COUNT; ++index) {
+        const OneWire_Bus bus_config = {
+            .context = &temperature_gpio[index],
+            .drive_low = one_wire_drive_low,
+            .release_line = one_wire_release,
+            .read_line = one_wire_read,
+            .delay_us = one_wire_delay_us,
+            .enter_critical = one_wire_enter_critical,
+            .exit_critical = one_wire_exit_critical
+        };
+        if (!OneWire_Init(&temperature_buses[index], &bus_config)) {
+            temperature_manager_ready = false;
+            return;
+        }
+    }
+
+    memset(&manager_config, 0, sizeof(manager_config));
+    manager_config.buses = temperature_buses;
+    manager_config.bus_count = TEMPERATURE_BUS_COUNT;
+    manager_config.sensor_count = APP_TEMPERATURE_SENSOR_COUNT;
+    manager_config.sample_interval_ms = TEMPERATURE_SAMPLE_INTERVAL_MS;
+    manager_config.discovery_interval_ms =
+        TEMPERATURE_DISCOVERY_INTERVAL_MS;
+    manager_config.conversion_time_ms = TEMPERATURE_CONVERSION_TIME_MS;
+    manager_config.auto_replace_unambiguous = true;
+    manager_config.get_time_ms = temperature_time_ms;
+    manager_config.load_mappings = temperature_load_mappings;
+    manager_config.save_mappings = temperature_save_mappings;
+    temperature_manager_ready =
+        DS18B20_ManagerInit(&g_app_temperature, &manager_config) ==
+        DS18B20_MANAGER_STATUS_OK;
+}
+
 /** Try a complete initialization and publish a clear LED/debugger result. */
 static void initialize_ade(void)
 {
@@ -279,6 +415,7 @@ static void initialize_ade(void)
 void App_Init(SPI_HandleTypeDef *ade_spi)
 {
     DiagnosticLed_Init();
+    initialize_temperature_manager();
     memset((void *)&g_app_electrical, 0, sizeof(g_app_electrical));
     memset(&measurement_calibration, 0, sizeof(measurement_calibration));
     memset(phase_conversion_enabled, 0, sizeof(phase_conversion_enabled));
@@ -310,6 +447,9 @@ void App_Process(void)
     const uint32_t now = HAL_GetTick();
 
     DiagnosticLed_Process();
+    if (temperature_manager_ready) {
+        DS18B20_ManagerProcess(&g_app_temperature);
+    }
     if (ade_spi_handle == NULL) {
         return;
     }
@@ -338,6 +478,39 @@ void App_Process(void)
         DiagnosticLed_SetMode(DIAGNOSTIC_LED_MODE_ERROR);
         next_ade_action_ms = now + ADE_RETRY_INTERVAL_MS;
     }
+}
+
+DS18B20_ManagerStatus App_TemperatureDiscover(void)
+{
+    return temperature_manager_ready
+               ? DS18B20_ManagerDiscover(&g_app_temperature)
+               : DS18B20_MANAGER_STATUS_INVALID_ARGUMENT;
+}
+
+DS18B20_ManagerStatus App_TemperatureAssignDiscovered(
+    uint8_t logical_number, uint8_t discovery_index)
+{
+    return temperature_manager_ready
+               ? DS18B20_ManagerAssignDiscovered(
+                     &g_app_temperature, logical_number, discovery_index)
+               : DS18B20_MANAGER_STATUS_INVALID_ARGUMENT;
+}
+
+DS18B20_ManagerStatus App_TemperatureAssignRom(
+    uint8_t logical_number, uint8_t bus_index,
+    const uint8_t rom[DS18B20_ROM_SIZE])
+{
+    return temperature_manager_ready
+               ? DS18B20_ManagerAssignRom(&g_app_temperature,
+                                           logical_number, bus_index, rom)
+               : DS18B20_MANAGER_STATUS_INVALID_ARGUMENT;
+}
+
+DS18B20_ManagerStatus App_TemperatureClear(uint8_t logical_number)
+{
+    return temperature_manager_ready
+               ? DS18B20_ManagerClear(&g_app_temperature, logical_number)
+               : DS18B20_MANAGER_STATUS_INVALID_ARGUMENT;
 }
 
 /** Install a measured voltage calibration for one phase. */

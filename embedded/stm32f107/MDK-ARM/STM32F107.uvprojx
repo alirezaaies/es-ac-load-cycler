@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F107xC</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Application/Inc;../Libraries/ADE7880/Inc;../Libraries/AM2315/Inc;../Libraries/DS18B20/Inc;../Libraries/HIH/Inc;../Libraries/MovingAverage/Inc;../Libraries/OneWire/Inc;../Libraries/SensorAddressStore/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include</IncludePath>
+              <IncludePath>../Core/Inc;../Application/Inc;../Libraries/ADE7880/Inc;../Libraries/AM2315/Inc;../Libraries/DS18B20/Inc;../Libraries/DS18B20Manager/Inc;../Libraries/HIH/Inc;../Libraries/MovingAverage/Inc;../Libraries/OneWire/Inc;../Libraries/SensorAddressStore/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -432,6 +432,7 @@
             <File><FileName>ade7880.c</FileName><FileType>1</FileType><FilePath>..\Libraries\ADE7880\Src\ade7880.c</FilePath></File>
             <File><FileName>am2315.c</FileName><FileType>1</FileType><FilePath>..\Libraries\AM2315\Src\am2315.c</FilePath></File>
             <File><FileName>ds18b20.c</FileName><FileType>1</FileType><FilePath>..\Libraries\DS18B20\Src\ds18b20.c</FilePath></File>
+            <File><FileName>ds18b20_manager.c</FileName><FileType>1</FileType><FilePath>..\Libraries\DS18B20Manager\Src\ds18b20_manager.c</FilePath></File>
             <File><FileName>hih.c</FileName><FileType>1</FileType><FilePath>..\Libraries\HIH\Src\hih.c</FilePath></File>
             <File><FileName>moving_average.c</FileName><FileType>1</FileType><FilePath>..\Libraries\MovingAverage\Src\moving_average.c</FilePath></File>
             <File><FileName>one_wire.c</FileName><FileType>1</FileType><FilePath>..\Libraries\OneWire\Src\one_wire.c</FilePath></File>

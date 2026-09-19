@@ -113,15 +113,16 @@ void SystemClock_Config(void)
   }
 }
 
-/** Configure the two diagnostic LEDs and the ADE7880 chip-select output. */
+/** Configure LEDs, ADE7880 chip select, and two open-drain 1-Wire buses. */
 static void MX_GPIO_Init(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
 
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13 | GPIO_PIN_14, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(ADE_CS_GPIO_Port, ADE_CS_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOC, ONE_WIRE_2_Pin | GPIO_PIN_13 | GPIO_PIN_14,
+                    GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOB, ONE_WIRE_1_Pin | ADE_CS_Pin, GPIO_PIN_SET);
 
   GPIO_InitStruct.Pin = GPIO_PIN_13 | GPIO_PIN_14;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -134,6 +135,18 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(ADE_CS_GPIO_Port, &GPIO_InitStruct);
+
+  GPIO_InitStruct.Pin = ONE_WIRE_1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+  HAL_GPIO_Init(ONE_WIRE_1_GPIO_Port, &GPIO_InitStruct);
+
+  GPIO_InitStruct.Pin = ONE_WIRE_2_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+  HAL_GPIO_Init(ONE_WIRE_2_GPIO_Port, &GPIO_InitStruct);
 }
 
 void Error_Handler(void)

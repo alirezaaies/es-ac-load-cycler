@@ -1,96 +1,97 @@
 /** @file one_wire.c */
 #include "one_wire.h"
 
-#include <stddef.h>
+#include <string.h>
 
-/** A valid bus has a GPIO, one pin mask, and an accurate delay provider. */
-static bool is_valid(const OneWire_Bus *bus)
+#define ONE_WIRE_SEARCH_ROM 0xF0U
+
+static uint32_t enter_critical(const OneWire_Bus *bus)
 {
-    return (bus != NULL) && (bus->port != NULL) &&
-           (bus->pin != 0U) && (bus->delay_us != NULL);
+    return (bus->enter_critical != NULL)
+               ? bus->enter_critical(bus->context)
+               : 0U;
 }
 
-/** Open-drain high releases the line to its mandatory external pull-up. */
-static void release_line(const OneWire_Bus *bus)
+static void exit_critical(const OneWire_Bus *bus, uint32_t state)
 {
-    HAL_GPIO_WritePin(bus->port, bus->pin, GPIO_PIN_SET);
+    if (bus->exit_critical != NULL) {
+        bus->exit_critical(bus->context, state);
+    }
 }
 
-static void pull_low(const OneWire_Bus *bus)
+bool OneWire_IsValid(const OneWire_Bus *bus)
 {
-    HAL_GPIO_WritePin(bus->port, bus->pin, GPIO_PIN_RESET);
+    return (bus != NULL) && (bus->drive_low != NULL) &&
+           (bus->release_line != NULL) && (bus->read_line != NULL) &&
+           (bus->delay_us != NULL);
 }
 
-bool OneWire_Init(OneWire_Bus *bus,
-                  GPIO_TypeDef *port,
-                  uint16_t pin,
-                  OneWire_DelayUs delay_us)
+bool OneWire_Init(OneWire_Bus *bus, const OneWire_Bus *configuration)
 {
-    GPIO_InitTypeDef gpio = {0};
-
-    if ((bus == NULL) || (port == NULL) || (pin == 0U) || (delay_us == NULL)) {
+    if ((bus == NULL) || !OneWire_IsValid(configuration)) {
         return false;
     }
-    bus->port = port;
-    bus->pin = pin;
-    bus->delay_us = delay_us;
-
-    release_line(bus);
-    gpio.Pin = pin;
-    gpio.Mode = GPIO_MODE_OUTPUT_OD;
-    gpio.Pull = GPIO_NOPULL;
-    gpio.Speed = GPIO_SPEED_FREQ_HIGH;
-    HAL_GPIO_Init(port, &gpio);
-    release_line(bus);
+    *bus = *configuration;
+    bus->release_line(bus->context);
     return true;
 }
 
 bool OneWire_Reset(const OneWire_Bus *bus)
 {
     bool presence;
+    uint32_t critical_state;
 
-    if (!is_valid(bus)) {
+    if (!OneWire_IsValid(bus)) {
         return false;
     }
-    pull_low(bus);
-    bus->delay_us(480U);
-    release_line(bus);
-    bus->delay_us(70U);
-    presence = (HAL_GPIO_ReadPin(bus->port, bus->pin) == GPIO_PIN_RESET);
-    bus->delay_us(410U);
+    critical_state = enter_critical(bus);
+    bus->drive_low(bus->context);
+    bus->delay_us(bus->context, 480U);
+    bus->release_line(bus->context);
+    bus->delay_us(bus->context, 70U);
+    presence = !bus->read_line(bus->context);
+    bus->delay_us(bus->context, 410U);
+    exit_critical(bus, critical_state);
     return presence;
 }
 
 void OneWire_WriteBit(const OneWire_Bus *bus, bool value)
 {
-    if (!is_valid(bus)) {
+    uint32_t critical_state;
+
+    if (!OneWire_IsValid(bus)) {
         return;
     }
-    pull_low(bus);
+    critical_state = enter_critical(bus);
+    bus->drive_low(bus->context);
     if (value) {
-        bus->delay_us(6U);
-        release_line(bus);
-        bus->delay_us(64U);
+        bus->delay_us(bus->context, 6U);
+        bus->release_line(bus->context);
+        bus->delay_us(bus->context, 64U);
     } else {
-        bus->delay_us(60U);
-        release_line(bus);
-        bus->delay_us(10U);
+        bus->delay_us(bus->context, 60U);
+        bus->release_line(bus->context);
+        bus->delay_us(bus->context, 10U);
     }
+    exit_critical(bus, critical_state);
 }
 
 bool OneWire_ReadBit(const OneWire_Bus *bus)
 {
     bool value;
+    uint32_t critical_state;
 
-    if (!is_valid(bus)) {
+    if (!OneWire_IsValid(bus)) {
         return false;
     }
-    pull_low(bus);
-    bus->delay_us(6U);
-    release_line(bus);
-    bus->delay_us(9U);
-    value = (HAL_GPIO_ReadPin(bus->port, bus->pin) == GPIO_PIN_SET);
-    bus->delay_us(55U);
+    critical_state = enter_critical(bus);
+    bus->drive_low(bus->context);
+    bus->delay_us(bus->context, 3U);
+    bus->release_line(bus->context);
+    bus->delay_us(bus->context, 10U);
+    value = bus->read_line(bus->context);
+    bus->delay_us(bus->context, 53U);
+    exit_critical(bus, critical_state);
     return value;
 }
 
@@ -113,7 +114,7 @@ uint8_t OneWire_ReadByte(const OneWire_Bus *bus)
     return value;
 }
 
-uint8_t OneWire_Crc8(const uint8_t *data, uint32_t length)
+uint8_t OneWire_Crc8(const uint8_t *data, size_t length)
 {
     uint8_t crc = 0U;
 
@@ -132,4 +133,99 @@ uint8_t OneWire_Crc8(const uint8_t *data, uint32_t length)
         }
     }
     return crc;
+}
+
+void OneWire_SearchReset(OneWire_SearchState *state)
+{
+    if (state != NULL) {
+        memset(state, 0, sizeof(*state));
+    }
+}
+
+static bool search_next(const OneWire_Bus *bus, OneWire_SearchState *state)
+{
+    uint8_t bit_number = 1U;
+    uint8_t last_zero = 0U;
+    uint8_t rom_byte_number = 0U;
+    uint8_t rom_byte_mask = 1U;
+
+    if (!OneWire_IsValid(bus) || (state == NULL) || state->last_device) {
+        return false;
+    }
+    if (!OneWire_Reset(bus)) {
+        OneWire_SearchReset(state);
+        return false;
+    }
+    OneWire_WriteByte(bus, ONE_WIRE_SEARCH_ROM);
+
+    while (rom_byte_number < ONE_WIRE_ROM_SIZE) {
+        const bool id_bit = OneWire_ReadBit(bus);
+        const bool complement_bit = OneWire_ReadBit(bus);
+        bool direction;
+
+        if (id_bit && complement_bit) {
+            break;
+        }
+        if (id_bit != complement_bit) {
+            direction = id_bit;
+        } else {
+            if (bit_number < state->last_discrepancy) {
+                direction = (state->rom[rom_byte_number] & rom_byte_mask) != 0U;
+            } else {
+                direction = bit_number == state->last_discrepancy;
+            }
+            if (!direction) {
+                last_zero = bit_number;
+                if (last_zero < 9U) {
+                    state->last_family_discrepancy = last_zero;
+                }
+            }
+        }
+
+        if (direction) {
+            state->rom[rom_byte_number] |= rom_byte_mask;
+        } else {
+            state->rom[rom_byte_number] &= (uint8_t)~rom_byte_mask;
+        }
+        OneWire_WriteBit(bus, direction);
+
+        ++bit_number;
+        rom_byte_mask <<= 1U;
+        if (rom_byte_mask == 0U) {
+            ++rom_byte_number;
+            rom_byte_mask = 1U;
+        }
+    }
+
+    if ((bit_number != 65U) ||
+        (OneWire_Crc8(state->rom, ONE_WIRE_ROM_SIZE - 1U) !=
+         state->rom[ONE_WIRE_ROM_SIZE - 1U])) {
+        OneWire_SearchReset(state);
+        return false;
+    }
+    state->last_discrepancy = last_zero;
+    state->last_device = last_zero == 0U;
+    return true;
+}
+
+bool OneWire_SearchFirst(const OneWire_Bus *bus,
+                         OneWire_SearchState *state,
+                         uint8_t rom[ONE_WIRE_ROM_SIZE])
+{
+    if ((state == NULL) || (rom == NULL)) {
+        return false;
+    }
+    OneWire_SearchReset(state);
+    return OneWire_SearchNext(bus, state, rom);
+}
+
+bool OneWire_SearchNext(const OneWire_Bus *bus,
+                        OneWire_SearchState *state,
+                        uint8_t rom[ONE_WIRE_ROM_SIZE])
+{
+    if ((state == NULL) || (rom == NULL) || !search_next(bus, state)) {
+        return false;
+    }
+    memcpy(rom, state->rom, ONE_WIRE_ROM_SIZE);
+    return true;
 }

@@ -9,6 +9,7 @@
 #define APP_H
 
 #include "ade7880.h"
+#include "ds18b20_manager.h"
 #include "stm32f1xx_hal.h"
 
 #include <stdbool.h>
@@ -24,6 +25,9 @@
 #ifndef APP_DEFAULT_POWER_DISPLAY_UNITS_PER_WATT
 #define APP_DEFAULT_POWER_DISPLAY_UNITS_PER_WATT 10.0F
 #endif
+
+/** Numbered DS18B20 capacity. Human-facing sensor numbers are 1..32. */
+#define APP_TEMPERATURE_SENSOR_COUNT 32U
 
 #ifdef __cplusplus
 extern "C" {
@@ -100,6 +104,15 @@ typedef struct {
 extern volatile App_ElectricalState g_app_electrical;
 
 /**
+ * Live DS18B20 state for the debugger Watch window.
+ *
+ * `slots[0]` is sensor number 1 and `slots[31]` is sensor number 32.
+ * A temperature is usable only when `mapping.assigned`, `present`, and `valid`
+ * are all true. `discovered[]` shows ROMs found on PB10 bus 0 and PC7 bus 1.
+ */
+extern DS18B20_Manager g_app_temperature;
+
+/**
  * @brief Initialize LEDs and start ADE7880 using an initialized SPI handle.
  * @param ade_spi Address of CubeMX's initialized SPI2 handle.
  *
@@ -115,6 +128,28 @@ void App_Init(SPI_HandleTypeDef *ade_spi);
  * once per second while online.
  */
 void App_Process(void);
+
+/** Run an immediate ROM discovery when no conversion/read cycle is active. */
+DS18B20_ManagerStatus App_TemperatureDiscover(void);
+
+/**
+ * @brief Bind one discovered ROM to a stable logical sensor number.
+ * @param logical_number Human label from 1 through 32.
+ * @param discovery_index Index in g_app_temperature.discovered[].
+ *
+ * The mapping is saved to the reserved Flash page. Calling this for an already
+ * assigned logical number is the explicit replacement workflow.
+ */
+DS18B20_ManagerStatus App_TemperatureAssignDiscovered(
+    uint8_t logical_number, uint8_t discovery_index);
+
+/** Bind a known ROM directly; useful for production provisioning tools. */
+DS18B20_ManagerStatus App_TemperatureAssignRom(
+    uint8_t logical_number, uint8_t bus_index,
+    const uint8_t rom[DS18B20_ROM_SIZE]);
+
+/** Clear one saved logical number and persist the empty slot. */
+DS18B20_ManagerStatus App_TemperatureClear(uint8_t logical_number);
 
 /**
  * @brief Restore every phase and neutral-current startup calibration.

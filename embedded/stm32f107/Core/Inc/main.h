@@ -64,6 +64,10 @@ void Error_Handler(void);
 #define DEBUG_LED_2_GPIO_Port GPIOC
 #define ADE_CS_Pin GPIO_PIN_12
 #define ADE_CS_GPIO_Port GPIOB
+#define ONE_WIRE_1_Pin GPIO_PIN_10
+#define ONE_WIRE_1_GPIO_Port GPIOB
+#define ONE_WIRE_2_Pin GPIO_PIN_7
+#define ONE_WIRE_2_GPIO_Port GPIOC
 
 /* USER CODE BEGIN Private defines */
 
