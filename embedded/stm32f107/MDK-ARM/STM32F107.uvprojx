@@ -429,14 +429,46 @@
         <Group>
           <GroupName>Libraries/Reusable</GroupName>
           <Files>
-            <File><FileName>ade7880.c</FileName><FileType>1</FileType><FilePath>..\Libraries\ADE7880\Src\ade7880.c</FilePath></File>
-            <File><FileName>am2315.c</FileName><FileType>1</FileType><FilePath>..\Libraries\AM2315\Src\am2315.c</FilePath></File>
-            <File><FileName>ds18b20.c</FileName><FileType>1</FileType><FilePath>..\Libraries\DS18B20\Src\ds18b20.c</FilePath></File>
-            <File><FileName>ds18b20_manager.c</FileName><FileType>1</FileType><FilePath>..\Libraries\DS18B20Manager\Src\ds18b20_manager.c</FilePath></File>
-            <File><FileName>hih.c</FileName><FileType>1</FileType><FilePath>..\Libraries\HIH\Src\hih.c</FilePath></File>
-            <File><FileName>moving_average.c</FileName><FileType>1</FileType><FilePath>..\Libraries\MovingAverage\Src\moving_average.c</FilePath></File>
-            <File><FileName>one_wire.c</FileName><FileType>1</FileType><FilePath>..\Libraries\OneWire\Src\one_wire.c</FilePath></File>
-            <File><FileName>sensor_address_store.c</FileName><FileType>1</FileType><FilePath>..\Libraries\SensorAddressStore\Src\sensor_address_store.c</FilePath></File>
+            <File>
+              <FileName>ade7880.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Libraries\ADE7880\Src\ade7880.c</FilePath>
+            </File>
+            <File>
+              <FileName>am2315.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Libraries\AM2315\Src\am2315.c</FilePath>
+            </File>
+            <File>
+              <FileName>ds18b20.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Libraries\DS18B20\Src\ds18b20.c</FilePath>
+            </File>
+            <File>
+              <FileName>ds18b20_manager.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Libraries\DS18B20Manager\Src\ds18b20_manager.c</FilePath>
+            </File>
+            <File>
+              <FileName>hih.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Libraries\HIH\Src\hih.c</FilePath>
+            </File>
+            <File>
+              <FileName>moving_average.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Libraries\MovingAverage\Src\moving_average.c</FilePath>
+            </File>
+            <File>
+              <FileName>one_wire.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Libraries\OneWire\Src\one_wire.c</FilePath>
+            </File>
+            <File>
+              <FileName>sensor_address_store.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Libraries\SensorAddressStore\Src\sensor_address_store.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

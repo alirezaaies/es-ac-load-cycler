@@ -15,8 +15,8 @@
 #define ADE_SAMPLE_INTERVAL_MS 1000U /**< Normal electrical sample period. */
 #define ADE_RETRY_INTERVAL_MS 2000U /**< Delay between offline retries. */
 #define TEMPERATURE_BUS_COUNT 2U
-#define TEMPERATURE_SAMPLE_INTERVAL_MS 1000U
-#define TEMPERATURE_DISCOVERY_INTERVAL_MS 10000U
+#define TEMPERATURE_SAMPLE_INTERVAL_MS 250U
+#define TEMPERATURE_DISCOVERY_INTERVAL_MS 5000U
 #define TEMPERATURE_CONVERSION_TIME_MS 750U
 
 /** Public live state; inspect this symbol in the debugger Watch window. */
@@ -24,6 +24,9 @@ volatile App_ElectricalState g_app_electrical;
 
 /** Public numbered temperature state; inspect this symbol in debugger Watch. */
 DS18B20_Manager g_app_temperature;
+volatile float g_temperature_c[APP_TEMPERATURE_SENSOR_COUNT];
+volatile bool g_temperature_valid[APP_TEMPERATURE_SENSOR_COUNT];
+volatile uint8_t g_temperature_sensor_count;
 
 typedef struct {
     GPIO_TypeDef *port;
@@ -36,6 +39,25 @@ static App_OneWireGpio temperature_gpio[TEMPERATURE_BUS_COUNT] = {
 };
 static OneWire_Bus temperature_buses[TEMPERATURE_BUS_COUNT];
 static bool temperature_manager_ready;
+
+/** Publish the manager's detailed slots through a minimal application view. */
+static void publish_temperature_values(void)
+{
+    uint8_t assigned_count = 0U;
+
+    for (uint8_t index = 0U; index < APP_TEMPERATURE_SENSOR_COUNT; ++index) {
+        const DS18B20_SensorSlot *slot = &g_app_temperature.slots[index];
+        const bool assigned = slot->mapping.assigned == 1U;
+        const bool usable = assigned && slot->present && slot->valid;
+
+        if (assigned) {
+            ++assigned_count;
+        }
+        g_temperature_valid[index] = usable;
+        g_temperature_c[index] = usable ? slot->temperature_c : 0.0F;
+    }
+    g_temperature_sensor_count = assigned_count;
+}
 
 /*
  * Board startup calibration, written explicitly for easy review and editing.
@@ -367,6 +389,7 @@ static void initialize_temperature_manager(void)
     manager_config.discovery_interval_ms =
         TEMPERATURE_DISCOVERY_INTERVAL_MS;
     manager_config.conversion_time_ms = TEMPERATURE_CONVERSION_TIME_MS;
+    manager_config.auto_assign_new = true;
     manager_config.auto_replace_unambiguous = true;
     manager_config.get_time_ms = temperature_time_ms;
     manager_config.load_mappings = temperature_load_mappings;
@@ -374,6 +397,7 @@ static void initialize_temperature_manager(void)
     temperature_manager_ready =
         DS18B20_ManagerInit(&g_app_temperature, &manager_config) ==
         DS18B20_MANAGER_STATUS_OK;
+    publish_temperature_values();
 }
 
 /** Try a complete initialization and publish a clear LED/debugger result. */
@@ -449,6 +473,7 @@ void App_Process(void)
     DiagnosticLed_Process();
     if (temperature_manager_ready) {
         DS18B20_ManagerProcess(&g_app_temperature);
+        publish_temperature_values();
     }
     if (ade_spi_handle == NULL) {
         return;
@@ -478,6 +503,23 @@ void App_Process(void)
         DiagnosticLed_SetMode(DIAGNOSTIC_LED_MODE_ERROR);
         next_ade_action_ms = now + ADE_RETRY_INTERVAL_MS;
     }
+}
+
+bool App_TemperatureGetCelsius(uint8_t sensor_number, float *temperature_c)
+{
+    uint8_t index;
+
+    if ((sensor_number == 0U) ||
+        (sensor_number > APP_TEMPERATURE_SENSOR_COUNT) ||
+        (temperature_c == NULL)) {
+        return false;
+    }
+    index = (uint8_t)(sensor_number - 1U);
+    if (!g_temperature_valid[index]) {
+        return false;
+    }
+    *temperature_c = g_temperature_c[index];
+    return true;
 }
 
 DS18B20_ManagerStatus App_TemperatureDiscover(void)

@@ -159,6 +159,41 @@ static DS18B20_ManagerStatus auto_replace(DS18B20_Manager *manager)
     return DS18B20_MANAGER_STATUS_OK;
 }
 
+/** Assign every new ROM to the first free logical slot, in sorted order. */
+static DS18B20_ManagerStatus auto_assign_new(DS18B20_Manager *manager)
+{
+    if (!manager->config.auto_assign_new) {
+        return DS18B20_MANAGER_STATUS_OK;
+    }
+
+    for (uint8_t found = 0U; found < manager->discovered_count; ++found) {
+        uint8_t free_slot = DS18B20_MANAGER_UNASSIGNED_SLOT;
+
+        if (manager->discovered[found].assigned_slot !=
+            DS18B20_MANAGER_UNASSIGNED_SLOT) {
+            continue;
+        }
+        for (uint8_t slot = 0U; slot < manager->config.sensor_count; ++slot) {
+            if (!mapping_is_valid(manager, &manager->slots[slot].mapping)) {
+                free_slot = slot;
+                break;
+            }
+        }
+        if (free_slot == DS18B20_MANAGER_UNASSIGNED_SLOT) {
+            return DS18B20_MANAGER_STATUS_CAPACITY_EXCEEDED;
+        }
+
+        const DS18B20_ManagerStatus status = assign_rom(
+            manager, free_slot, manager->discovered[found].bus_index,
+            manager->discovered[found].rom, false);
+        if (status != DS18B20_MANAGER_STATUS_OK) {
+            return status;
+        }
+        ++manager->automatic_assignments;
+    }
+    return DS18B20_MANAGER_STATUS_OK;
+}
+
 DS18B20_ManagerStatus DS18B20_ManagerInit(
     DS18B20_Manager *manager, const DS18B20_ManagerConfig *configuration)
 {
@@ -231,6 +266,8 @@ DS18B20_ManagerStatus DS18B20_ManagerInit(
 
 DS18B20_ManagerStatus DS18B20_ManagerDiscover(DS18B20_Manager *manager)
 {
+    DS18B20_ManagerStatus status;
+
     if (manager == NULL) {
         return DS18B20_MANAGER_STATUS_INVALID_ARGUMENT;
     }
@@ -268,9 +305,15 @@ DS18B20_ManagerStatus DS18B20_ManagerDiscover(DS18B20_Manager *manager)
     sort_discovered(manager);
     refresh_assignment_links(manager);
     ++manager->discovery_passes;
-    manager->last_status = manager->discovery_overflow
-                               ? DS18B20_MANAGER_STATUS_CAPACITY_EXCEEDED
-                               : auto_replace(manager);
+    if (manager->discovery_overflow) {
+        manager->last_status = DS18B20_MANAGER_STATUS_CAPACITY_EXCEEDED;
+        return manager->last_status;
+    }
+    status = auto_replace(manager);
+    if (status == DS18B20_MANAGER_STATUS_OK) {
+        status = auto_assign_new(manager);
+    }
+    manager->last_status = status;
     return manager->last_status;
 }
 

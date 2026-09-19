@@ -84,6 +84,7 @@ typedef struct {
     uint32_t sample_interval_ms;
     uint32_t discovery_interval_ms;
     uint16_t conversion_time_ms;
+    bool auto_assign_new;
     bool auto_replace_unambiguous;
     void *time_context;
     DS18B20_ManagerGetTimeMs get_time_ms;
@@ -109,6 +110,7 @@ typedef struct {
     uint32_t next_sample_ms;
     uint32_t next_discovery_ms;
     uint32_t discovery_passes;
+    uint32_t automatic_assignments;
     uint32_t automatic_replacements;
 } DS18B20_Manager;
 
