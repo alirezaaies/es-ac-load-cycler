@@ -8,6 +8,7 @@
 #include "ds18b20_manager.h"
 #include "main.h"
 #include "sensor_address_store.h"
+#include "ui_counter.h"
 
 #include <string.h>
 
@@ -437,6 +438,7 @@ void App_Init(SPI_HandleTypeDef *ade_spi)
 {
     DiagnosticLed_Init();
     initialize_temperature_manager();
+    UiCounter_Init();
     memset((void *)&g_app_electrical, 0, sizeof(g_app_electrical));
     memset(&measurement_calibration, 0, sizeof(measurement_calibration));
     memset(phase_conversion_enabled, 0, sizeof(phase_conversion_enabled));
@@ -468,6 +470,7 @@ void App_Process(void)
     const uint32_t now = HAL_GetTick();
 
     DiagnosticLed_Process();
+    UiCounter_Process();
     if (temperature_manager_ready) {
         if (DS18B20_ManagerProcess(&temperature_manager)) {
             publish_temperature_values();

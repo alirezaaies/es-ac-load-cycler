@@ -120,9 +120,26 @@ static void MX_GPIO_Init(void)
 
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOD_CLK_ENABLE();
   HAL_GPIO_WritePin(GPIOC, ONE_WIRE_2_Pin | GPIO_PIN_13 | GPIO_PIN_14,
                     GPIO_PIN_SET);
   HAL_GPIO_WritePin(GPIOB, ONE_WIRE_1_Pin | ADE_CS_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOA, LCD_E_Pin | LCD_RW_Pin | LCD_RS_Pin |
+                    LCD_D4_Pin | LCD_D5_Pin | LCD_D6_Pin | LCD_D7_Pin,
+                    GPIO_PIN_RESET);
+
+  GPIO_InitStruct.Pin = LCD_E_Pin | LCD_RW_Pin | LCD_RS_Pin |
+                        LCD_D4_Pin | LCD_D5_Pin | LCD_D6_Pin | LCD_D7_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  GPIO_InitStruct.Pin = BUTTON_INC_Pin | BUTTON_DEC_Pin | BUTTON_RESET_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
   GPIO_InitStruct.Pin = GPIO_PIN_13 | GPIO_PIN_14;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -147,6 +164,11 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(ONE_WIRE_2_GPIO_Port, &GPIO_InitStruct);
+
+  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 }
 
 void Error_Handler(void)

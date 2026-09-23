@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F107xC</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Application/Inc;../Libraries/ADE7880/Inc;../Libraries/AM2315/Inc;../Libraries/DS18B20/Inc;../Libraries/DS18B20Manager/Inc;../Libraries/HIH/Inc;../Libraries/MovingAverage/Inc;../Libraries/OneWire/Inc;../Libraries/SensorAddressStore/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include</IncludePath>
+              <IncludePath>../Core/Inc;../Application/Inc;../Libraries/ADE7880/Inc;../Libraries/AM2315/Inc;../Libraries/CharacterLcd/Inc;../Libraries/DS18B20/Inc;../Libraries/DS18B20Manager/Inc;../Libraries/HIH/Inc;../Libraries/MovingAverage/Inc;../Libraries/OneWire/Inc;../Libraries/SensorAddressStore/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -424,6 +424,11 @@
               <FileType>1</FileType>
               <FilePath>..\Application\Src\diagnostic_led.c</FilePath>
             </File>
+            <File>
+              <FileName>ui_counter.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\Src\ui_counter.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -438,6 +443,11 @@
               <FileName>am2315.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Libraries\AM2315\Src\am2315.c</FilePath>
+            </File>
+            <File>
+              <FileName>character_lcd.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Libraries\CharacterLcd\Src\character_lcd.c</FilePath>
             </File>
             <File>
               <FileName>ds18b20.c</FileName>

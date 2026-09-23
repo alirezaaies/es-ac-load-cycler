@@ -68,6 +68,29 @@ void Error_Handler(void);
 #define ONE_WIRE_1_GPIO_Port GPIOB
 #define ONE_WIRE_2_Pin GPIO_PIN_7
 #define ONE_WIRE_2_GPIO_Port GPIOC
+#define LCD_E_Pin GPIO_PIN_6
+#define LCD_E_GPIO_Port GPIOA
+#define LCD_RW_Pin GPIO_PIN_7
+#define LCD_RW_GPIO_Port GPIOA
+#define LCD_RS_Pin GPIO_PIN_8
+#define LCD_RS_GPIO_Port GPIOA
+#define LCD_D4_Pin GPIO_PIN_9
+#define LCD_D4_GPIO_Port GPIOA
+#define LCD_D5_Pin GPIO_PIN_10
+#define LCD_D5_GPIO_Port GPIOA
+#define LCD_D6_Pin GPIO_PIN_11
+#define LCD_D6_GPIO_Port GPIOA
+#define LCD_D7_Pin GPIO_PIN_12
+#define LCD_D7_GPIO_Port GPIOA
+#define BUTTON_INC_Pin GPIO_PIN_9
+#define BUTTON_INC_GPIO_Port GPIOD
+#define BUTTON_INC_EXTI_IRQn EXTI9_5_IRQn
+#define BUTTON_DEC_Pin GPIO_PIN_10
+#define BUTTON_DEC_GPIO_Port GPIOD
+#define BUTTON_DEC_EXTI_IRQn EXTI15_10_IRQn
+#define BUTTON_RESET_Pin GPIO_PIN_11
+#define BUTTON_RESET_GPIO_Port GPIOD
+#define BUTTON_RESET_EXTI_IRQn EXTI15_10_IRQn
 
 /* USER CODE BEGIN Private defines */
 

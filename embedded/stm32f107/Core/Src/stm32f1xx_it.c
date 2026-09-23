@@ -44,3 +44,14 @@ void SysTick_Handler(void)
 {
   HAL_IncTick();
 }
+
+void EXTI9_5_IRQHandler(void)
+{
+  HAL_GPIO_EXTI_IRQHandler(BUTTON_INC_Pin);
+}
+
+void EXTI15_10_IRQHandler(void)
+{
+  HAL_GPIO_EXTI_IRQHandler(BUTTON_DEC_Pin);
+  HAL_GPIO_EXTI_IRQHandler(BUTTON_RESET_Pin);
+}
