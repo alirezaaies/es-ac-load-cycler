@@ -1,6 +1,6 @@
 # وضعیت توسعه و حافظه ادامه پروژه
 
-آخرین به‌روزرسانی: ۱۴۰۵/۰۷/۰۱ — 2026-09-23
+آخرین به‌روزرسانی: ۱۱ مهر ۱۴۰۵ — 2026-10-03، منطقه زمانی Asia/Tehran.
 
 این فایل حافظه عملیاتی کل پروژه است و در ریشه مخزن نگه‌داری می‌شود. باید در پایان هر نوبت تغییر کد، سخت‌افزار یا مستندات به‌روزرسانی شود. عامل انسانی یا هوش مصنوعی بعدی باید پیش از کار، این فایل را کامل بخواند. README معرفی و راه‌اندازی سریع است؛ این فایل تاریخچه تصمیم‌ها، وضعیت اعتبارسنجی و کارهای باز را نگه می‌دارد.
 
@@ -20,6 +20,72 @@
 6. نتیجه کامپایل جای آزمون سخت‌افزاری را نمی‌گیرد.
 7. در پایان هر نوبت، بخش «آخرین نوبت کار» و «کارهای باز» همین فایل به‌روزرسانی شود.
 8. تمام APIهای عمومی جدید با Doxygen انگلیسی شامل هدف، پارامتر، خروجی و خطا مستند شوند؛ ثابت سخت‌افزاری باید واحد و علت داشته باشد.
+
+## وضعیت جاری و نقطه تحویل برای ادامه فردا
+
+این بخش مرجع نسخه فعال است؛ یادداشت‌های مراحل پیشین پایین فایل تاریخچه‌اند و ممکن است رفتار قدیمی را شرح دهند. تاریخ تحویل: ۱۱ مهر ۱۴۰۵، برابر با 2026-10-03؛ نوبت بعدی موردنظر کاربر: 2026-10-04.
+
+### نتیجه تأییدشده امروز
+
+- کاربر عملکرد منوها، نمایشگر، کلیدها، رله‌ها و خواندن/نمایش پارامترهای الکتریکی را روی برد تأیید کرد. مشکل نمایش خط تیره سخت‌افزاری بود و توسط کاربر حل شد؛ جزئیات قطعه یا سیم‌بندی معیوب اعلام نشده است.
+- هر دو رله active-low هستند: PE1 نول و PE2 فاز؛ LOW=وصل، HIGH=قطع. نوشتن همزمان BSRR و سطح اولیه HIGH در adapter و CubeMX اعمال شده است.
+- آخرین کامیت عملکردی پیش از تکمیل مستندات `6aa787e` است؛ مرجع ادامه همیشه HEAD نهایی همین مخزن روی `main` است. `origin` برای مخزن GitHub تنظیم است؛ عامل در این جلسه پوش انجام نمی‌دهد.
+- ساخت تأییدشده: PlatformIO با `-Wall -Wextra -Werror`، Flash=16184 bytes و RAM=1056 bytes. دو آزمون واقعی ARM برای سیکل و مسیر الکتریکی موفق‌اند. تأیید سخت‌افزار، گزارش کاربر است؛ ابزار عامل به برد متصل نیست.
+- گزارش مرجع `docs/relay_on_duration_report.pdf` و سورس همنام است؛ نسخه ۱.۱، ۹۷ صفحه A4. فصل ۱۸ مرجع برنامه فعال، فصل ۱۷ مرجع کتابخانه LCD و تست اولیه، فصل ۱۵ مرجع ADE و فصل ۱۶ مرجع کتابخانه دماست.
+
+### توالی منو و اجرای تست
+
+۱. بوت: Welcome و سپس www.agfaco.com هر کدام دو ثانیه؛ سپس صفحه اصلی Idle. تعداد پیش‌فرض صفر، روشن سه و خاموش دو ثانیه؛ خروجی‌ها قطع‌اند.
+۲. نگه‌داشتن کلید ۳ روی PD11 به مدت سه ثانیه، تنظیم تعداد را باز می‌کند؛ ورود به تنظیمات تست جاری را متوقف و رله‌ها را قطع می‌کند.
+۳. کلید ۱/PD9 افزایش و کلید ۲/PD10 کاهش می‌دهد. بازه تعداد ۰ تا ۱۰۰۰۰۰ و زمان روشن/خاموش ۰ تا ۳۰۰ ثانیه، هر دو سر شامل هستند و تغییرات مدولار دور می‌زنند.
+۴. تک‌فشار یک واحد؛ نگه‌داشتن پس از ۵۰۰ ms با فاصله ۱۲۰ ms تکرار می‌کند. ۲۰ تغییر نخست شامل فشار اولیه یک‌واحدی، سپس پنج‌واحدی؛ فشار تازه شتاب را از ابتدا آغاز می‌کند. debounce فشار/رهاسازی ۳۰ ms است.
+۵. فشار کوتاه کلید ۳ هنگام رهاسازی تأیید می‌شود: تعداد → زمان روشن → زمان خاموش → Settings saved. سه مقدار فقط در تأیید مرحله آخر یکجا از draft به settings اعمال می‌شوند.
+۶. نگه‌داشتن کلید ۳ در هر مرحله تنظیمات همه تغییرات موقت را لغو می‌کند و تست با تنظیمات قبلی از سیکل یک شروع می‌شود؛ ادامه از وسط سیکل قبل وجود ندارد.
+۷. فشار کوتاه بعد از پیام ذخیره، تست جدید را شروع می‌کند. تنظیمات در RAM هستند و پس از reset/قطع تغذیه به پیش‌فرض برمی‌گردند.
+۸. هر سیکل ON سپس OFF است؛ شماره از ۱ تا تعداد بالا می‌رود، زمان هر مرحله معکوس است. بعد از آخرین OFF، خروجی‌ها قطع و Done نمایش داده می‌شود؛ شمارنده اضافه نمی‌شود.
+۹. تعداد صفر تست ندارد؛ ON صفر هیچ پالس وصلی ندارد؛ OFF صفر فقط گذار سریع خروجی دارد و قطع مکانیکی زمان‌دار تضمین نمی‌شود؛ هر دو زمان صفر پایان فوری دارند.
+
+### نمایش فعلی و محل تغییر آینده
+
+```text
+V230.1P9999T   1
+A 12.3PF0.98*  3
+```
+
+- V و A یک رقم اعشار، P بدون اعشار، PF قدرمطلق با دو رقم اعشار؛ واحدهای واقعی V/A/W و فاز پیش‌فرض A است. مقادیر راست‌چین‌اند. `*` وصل و `-` قطع؛ زمان سه‌رقمی و شماره سیکل افزایشی است.
+- شماره‌های بزرگ‌تر از ۹۹۹۹ به‌شکل شش‌رقمی در ستون راست دو سطر تقسیم می‌شوند؛ `T0010` و `C 00` یعنی ۰۰۱۰۰۰. ادامه شماره هر دو ثانیه با زمان/Done نوبتی می‌شود؛ ستون‌های اندازه‌گیری ثابت می‌مانند.
+- اعداد بزرگ با کاهش اعشار و سپس k/M/G فشرده می‌شوند. `--` داده نامعتبر/کهنه/ارتباط قطع است؛ صفر معتبر به‌صورت عدد نمایش داده می‌شود.
+- تغییر ظاهر: `Application/Src/ui_counter.c`، تابع `compose()` ساخت دو سطر و `number()` قالب عدد. گزینه‌ها در `Application/Inc/cycler_config.h`؛ نام ui_counter تاریخی است ولی اکنون برنامه کامل سیکل را دارد.
+- PA6=E، PA7=RW، PA8=RS، PA9..PA12=D4..D7. کلیدها active-high هستند. PC13/PC14 همواره یکی‌درمیان کار می‌کنند، حتی در خطای ADE.
+
+### مسیر پردازش و متغیرهای Watch
+
+- `main.c` فقط HAL/CubeMX و App را اجرا می‌کند؛ منطق محصول در Application است. همه کتابخانه‌ها حفظ شده‌اند؛ دما قبلاً توسط کاربر آزموده شده ولی در کاربرد فعلی `CYCLER_ENABLE_TEMPERATURE=0` است. رطوبت و UART به این کاربرد وصل نیستند.
+- ADE: PB12=CS و PB13/PB14/PB15=SPI2؛ Mode 3، نرخ 562.5 kbit/s. همه فازها و نول هر ثانیه خوانده می‌شوند؛ retry دو ثانیه، انتقال HAL polling با سقف ۲۰ ms و startup ماشین حالت است. LCD مکث میکروثانیه‌ای لازم دارد؛ معماری cooperative است، نه تضمین زمان واقعی سخت.
+- برای فاز A: `g_app_electrical.voltage_v[0]`، `current_a[0]`، `active_power_w[0]`، `power_factor_abs[0]`؛ PF علامت‌دار در `power_factor[0]`. اندیس ۱ و ۲ فاز B و C هستند.
+- تشخیص ارتباط: `online`، `successful_samples`، `updated_at_ms`، `last_status`، `last_error_status`، `startup_attempts`، `startup_errors`، `startup_stage`، `failed_startup_stage` و `communication_errors` زیر `g_app_electrical`؛ جزئیات در LOAD_CYCLER.md و فصل ۱۸.
+- نمایش عدد نیازمند online، نمونه جدیدتر از سه ثانیه و پرچم اعتبار هر کمیت است. آخرین خطا پس از موفقیت پاک نمی‌شود؛ برای وضعیت جاری، online و شمار نمونه‌ها هم بررسی شوند.
+- ضرایب کالیبراسیون و صفحه رزروشده نگاشت دما در Flash حفظ شدند؛ تأیید کارکرد فعلی معادل تأیید دقت آزمایشگاهی همه کانال‌ها نیست.
+
+### شروع نوبت بعد و کارهای باز
+
+۱. ابتدا همین بخش و فصل ۱۸ گزارش را بخوانید؛ کارکرد فعلی روی برد تأیید شده و نیازی به بازسازی منو از ابتدا نیست.
+۲. کار بعدی احتمالی تغییر ظاهر است؛ منتظر طرح/درخواست کاربر بمانید و سپس compose/number یا ثابت‌های نمایش را اصلاح کنید. رفتار منو و رله را بدون درخواست تغییر ندهید.
+۳. بعد از تغییر ظاهر، آزمون‌های ARM و build را اجرا و خروجی مورد انتظار LCD را با طرح جدید هماهنگ کنید؛ سپس روی برد بررسی شود.
+۴. موضوعات مستقل باقی‌مانده: ذخیره دائمی تنظیمات در صورت درخواست، کالیبراسیون ابزارمرجع کانال‌های استفاده‌شده، آزمون طولانی‌مدت، ساخت واقعی Keil و بررسی صنعتی watchdog/رفتار خطا. این‌ها مانع تأیید کارکرد فعلی نیستند و در این نوبت اجرا نشده‌اند.
+۵. جزئیات رفع مشکل سخت‌افزار، نگاشت دقیق کانال‌ها و نتایج اندازه‌گیری دقت در صورت اعلام کاربر ثبت شوند؛ حدس جای نتیجه ثبت‌شده ننشیند.
+
+### فایل‌ها و فرمان‌های اصلی
+
+- راهنمای کوتاه: `embedded/stm32f107/LOAD_CYCLER.md`؛ وضعیت ادامه: همین فایل؛ گزارش کامل: `docs/relay_on_duration_report.tex` و PDF همنام.
+- ساخت: `& "$env:USERPROFILE/.platformio/penv/Scripts/platformio.exe" run -d embedded/stm32f107`.
+- آزمون‌ها: `python embedded/stm32f107/tests/test_cycler.py` و `python embedded/stm32f107/tests/test_electrical.py`؛ نیازمند Python unicorn و ARM GCC نصب‌شده PlatformIO.
+- گزارش: دو گذر XeLaTeX از پوشه docs؛ رندر صفحات و بازبینی ظاهر پس از تغییر گزارش.
+
+
+## Historical handoff before the load-cycler application
+
+The following snapshot is preserved as history; use the current handoff above.
 
 ## وضعیت جاری نسخه نهایی این مرحله
 
@@ -157,7 +223,9 @@
 - پروگرام واقعی با J-Link و SWD موفق بود: پروگرامر و STM32F107VC شناسایی شدند، ولتاژ مرجع ۳٫۳۲۵ ولت بود، Flash پاک، نوشته و Verify شد و میکرو در پایان Reset شد.
 - مشاهده فیزیکی LEDها و تأیید قطب و ترتیب نور همچنان به بازخورد کاربر نیاز دارد.
 
-## کارهای باز و آزمون‌های مرحله بعد، به‌ترتیب اولویت
+## کارهای باز تاریخی پیش از تأیید نسخه سیکل
+
+این فهرست متعلق به مرحله پیشین است؛ اولویت‌های فعال در بخش «شروع نوبت بعد و کارهای باز» ابتدای فایل آمده‌اند. کارکرد نمایشگر، کلیدها، رله‌ها و اندازه‌گیری اکنون توسط کاربر تأیید شده است؛ نتیجه آزمون‌های دقیق تعداد فشار، مدت طولانی یا دقت آزمایشگاهی هنوز جداگانه ثبت نشده است.
 
 1. حاشیه منطقی LCD پنج‌ولتی اصلاح/تأیید و سپس توالی راه‌اندازی، کنتراست، سیم‌بندی `DB4..DB7` و نمایش پایدار متن روی برد آزموده شود.
 2. هر کلید دست‌کم ۵۰ بار، نگه‌داشتن طولانی، حدود صفر/صد و reset آزموده شود؛ هم‌زمان ادامه چشمک LED، نمونه‌برداری ADE7880 و دما کنترل شود.
@@ -626,7 +694,7 @@
 - گزارش در دو گذر XeLaTeX ساخته شد: ۹۰ صفحه A4. فصل تازه پس از رفع نویسه‌های لاتین خارج `lr` و overfull نهایی دوباره رندر و بازبینی شد.
 - آزمون فیزیکی LCD، سطح منطقی، کلیدها و هم‌زمانی با LED/سنسورها هنوز باید طبق دو بند نخست کارهای باز توسط کاربر انجام شود.
 
-## Latest session ? 2026-10-03: active-low load cycler
+## Historical session - 2026-10-03: active-low load cycler
 
 The user confirmed the load-cycler application works on hardware and clarified that both relay drivers are active-low. CYCLER_RELAY_ACTIVE_HIGH is now 0: LOW connects, HIGH disconnects. PE1/PE2 are changed together, initialized OFF before output mode, and recorded HIGH in CubeMX. Other application behavior is retained.
 
@@ -638,7 +706,7 @@ Repository: resolve the pre-existing .gitignore merge by retaining both sets of 
 
 Open items: program and verify the corrected relay polarity; decide whether future settings should survive power loss; run the Keil build on the Keil workstation.
 
-## Latest session ? 2026-10-03: electrical readout compatibility and diagnostics
+## Historical session - 2026-10-03: electrical readout compatibility and diagnostics
 
 User reports relay cycling/UI work but electrical LCD fields show dashes. The previous refactor changed ADE SPI timeout from 20 ms to 2 ms. Restored the established 20 ms budget while retaining cooperative startup, existing wiring, calibration, active-low outputs, and LCD validity checks. This is a plausible software regression fix; the physical cause remains unconfirmed until the updated firmware is run or debugger values are supplied.
 
@@ -647,3 +715,18 @@ Added startup attempt/error counters, current/failed startup stage and retained 
 Added tests/test_electrical.py exercising real ARM-compiled electrical app code plus the real ADE7880 driver against a simulated SPI/register model, including a 3 ms transfer, calibrated V/A/W/PF publication, read errors, retries and startup failure diagnosis. Existing cycler tests now also check offline/stale dashes and numeric display recovery.
 
 Validation: both ARM tests pass; PlatformIO -Wall -Wextra -Werror build passes (Flash 16184 bytes, RAM 1056 bytes). No physical board is connected to this session. Follow-up: flash this version and verify online=true and successful_samples increases; if fields remain dashes, inspect last_error_status and failed_startup_stage. Watch expressions are documented in LOAD_CYCLER.md. Keil hardware build remains outstanding.
+
+## آخرین نوبت کار — پایان جلسه 2026-10-03
+
+کاربر اعلام کرد مشکل سخت‌افزاری برطرف و تمام برنامه شامل خواندن و نمایش پارامترهای الکتریکی درست کار می‌کند. جزئیات علت سخت‌افزاری گزارش نشده؛ یادداشت قبلیِ «نیاز به تأیید خواندن» اکنون تاریخی است. منطق برنامه در این نوبت تغییر نکرد.
+
+انجام‌شده:
+
+- خلاصه ابتدای همین فایل با وضعیت واقعی امروز، پایه‌ها، توالی منو، ذخیره RAM، لغو، سیکل و حالت‌های صفر، نمایش فعلی، متغیرهای Watch و نقطه شروع فردا جایگزین شد؛ خلاصه قدیمی به‌عنوان تاریخچه حفظ شد.
+- فصل ۱۸ گزارش به برنامه نهایی اختصاص یافت و جلد، راهنمای خواندن، فصل‌های ۱، ۱۵ و ۱۷ و READMEها با ارجاع روشن به نسخه فعال هماهنگ شدند.
+- گزارش نسخه ۱.۱ در دو گذر XeLaTeX ساخته شد: ۹۷ صفحه A4 و ۳۳۷۵۰۹ بایت. لاگ نهایی فاقد خطای TeX، هشدار، نویسه مفقود و overfull/underfull است. پیام عمومی ابزار درباره اجرای محیط با دسترسی بالا مربوط به محتوای سند نیست.
+- همه صفحات در پنج تماس‌برگ و شش صفحه فصل تازه با وضوح بالاتر بررسی شدند؛ برش، هم‌پوشانی و خرابی جهت متن دیده نشد.
+- هر دو آزمون ARM و ساخت PlatformIO دوباره موفق بودند: Flash=16184 bytes، RAM=1056 bytes. هیچ پروگرام یا آزمون سخت‌افزاری جدیدی توسط عامل اجرا نشد؛ تأیید عملی متعلق به کاربر است.
+- کامیت نهایی این نوبت فقط مستندات و نقطه تحویل را ثبت می‌کند؛ پوش با کاربر است.
+
+محل توقف: نسخه عملکردی تأییدشده و مستندات به‌روز آماده‌اند. کار بعدی محتمل، طراحی تغییر ظاهر دو سطر LCD با درخواست کاربر و اصلاح compose/number یا ثابت‌های نمایش است؛ رفتار کنترل فعلی بدون درخواست تغییر نکند. موضوعات باز در بخش جاری ابتدای فایل آمده‌اند.

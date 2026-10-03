@@ -42,11 +42,11 @@ HAL SysTick supplies the millisecond clock. Menus, countdowns, splash pages, LED
 
 Build with platformio run -d embedded/stm32f107. Run python embedded/stm32f107/tests/test_cycler.py with Python unicorn and PlatformIO's ARM GCC installed. The test executes actual ARM-compiled state-machine code and covers buttons, acceleration, wrap, atomic confirmation/cancellation, ten 3-second/2-second cycles, zero durations, tick rollover, LCD bounds, and active-low BSRR outputs.
 
-The user confirmed the previous application works on hardware. The corrected active-low polarity still needs programming onto the board. Existing ADE calibration is preserved.
+On 2026-10-03 the user confirmed the current application, active-low relays, menus and electrical readout work on hardware. The missing readout was caused by a hardware problem that the user resolved; the specific cause was not provided. Existing ADE calibration is preserved; functional confirmation is not a metrological calibration result.
 
 ## Electrical reading diagnostics ? 2026-10-03
 
-The cycler refactor reduced the SPI timeout from the established 20 ms budget to 2 ms. Restore 20 ms so delayed transfers do not unnecessarily reject a complete sample. This is a compatibility correction, not a confirmed diagnosis of the physical board. Startup remains cooperative. Do not replace invalid data with zero or bypass the LCD validity checks.
+The cycler refactor reduced the SPI timeout from the established 20 ms budget to 2 ms. Restore 20 ms so delayed transfers do not unnecessarily reject a complete sample. This is a compatibility correction. The user later confirmed the original readout failure was hardware-related and resolved it. Startup remains cooperative. Do not replace invalid data with zero or bypass the LCD validity checks.
 
 Run `python embedded/stm32f107/tests/test_electrical.py` for the electrical path regression. It compiles real electrical app code and the portable driver for ARM, with a simulated ADE register model. It verifies startup, a modeled 3 ms transfer, calibration publication, foreground servicing, communication failures and recovery. This model does not prove the board's timing or wiring.
 
@@ -72,3 +72,7 @@ Add these expressions to the debugger Watch window (index 0 = phase A, 1 = B, 2 
 | g_app_electrical.raw.phase[0] | Raw RMS, power and Q1.15 PF registers |
 
 Startup stages: 0 idle; 1 power wait; 2 chip-select pulses; 3 SPI lock; 4 reset request; 5 reset completion; 6 RUN/DSP start; 7 VERSION read. Error codes follow ADE7880_Status in Libraries/ADE7880/Inc/ade7880.h. The LCD requires online communication, a sample younger than 3 seconds, and each quantity's corresponding validity flag. A connected load alone does not make those checks true.
+
+## Handoff
+
+Current behavior is hardware-confirmed by the user. Read PROJECT_STATUS.md and report chapter 18 before continuing. The next anticipated task is a display-layout change; keep menu, relay and acquisition behavior unless the user requests otherwise. Re-run both ARM tests and the firmware build after code changes. Persistent settings, laboratory calibration, endurance validation and an actual Keil build remain separate follow-ups.
