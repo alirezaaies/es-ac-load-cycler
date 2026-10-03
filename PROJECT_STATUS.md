@@ -625,3 +625,15 @@
 - فایل Keil از نظر XML معتبر است و `ui_counter.c`، `character_lcd.c` و include جدید را دارد؛ build واقعی Keil در ایستگاه دارای Keil باقی مانده است.
 - گزارش در دو گذر XeLaTeX ساخته شد: ۹۰ صفحه A4. فصل تازه پس از رفع نویسه‌های لاتین خارج `lr` و overfull نهایی دوباره رندر و بازبینی شد.
 - آزمون فیزیکی LCD، سطح منطقی، کلیدها و هم‌زمانی با LED/سنسورها هنوز باید طبق دو بند نخست کارهای باز توسط کاربر انجام شود.
+
+## Latest session ? 2026-10-03: active-low load cycler
+
+The user confirmed the load-cycler application works on hardware and clarified that both relay drivers are active-low. CYCLER_RELAY_ACTIVE_HIGH is now 0: LOW connects, HIGH disconnects. PE1/PE2 are changed together, initialized OFF before output mode, and recorded HIGH in CubeMX. Other application behavior is retained.
+
+The full previously uncommitted application is included: transactional three-stage settings, hold-to-cancel, accelerated buttons, cycle timing, electrical LCD display, alternating LEDs, and cooperative ADE startup. Libraries remain present; temperature processing is disabled by default. Settings remain in RAM. See embedded/stm32f107/LOAD_CYCLER.md for current behavior; older baseline notes above are historical.
+
+Validation: PlatformIO build with -Wall -Wextra -Werror and ARM-emulated state-machine regression tests, including explicit LOW=ON/HIGH=OFF BSRR assertions. Physical validation of the corrected polarity requires flashing the updated binary. Keil hardware build remains a follow-up.
+
+Repository: resolve the pre-existing .gitignore merge by retaining both sets of ignore rules; preserve the incoming MIT LICENSE. Record that merge separately from the application implementation. No push is performed; the user will push.
+
+Open items: program and verify the corrected relay polarity; decide whether future settings should survive power loss; run the Keil build on the Keil workstation.

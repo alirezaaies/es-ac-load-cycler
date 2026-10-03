@@ -1,4 +1,4 @@
-/** @file ui_counter.h @brief LCD and three-button counter demonstration. */
+/** @file ui_counter.h @brief LCD and three-button load cycler. */
 #ifndef UI_COUNTER_H
 #define UI_COUNTER_H
 
@@ -8,9 +8,9 @@
 extern "C" {
 #endif
 
-extern volatile uint8_t g_ui_counter_value;
+extern volatile uint32_t g_ui_counter_value;
 
-/** @brief Initialize the LCD and zero-to-100 counter user interface.
+/** @brief Initialize relays OFF, LCD and load-cycler state.
  * GPIO and the HAL tick must already be initialized. */
 void UiCounter_Init(void);
 /** @brief Service debounce and pending UI events without blocking.

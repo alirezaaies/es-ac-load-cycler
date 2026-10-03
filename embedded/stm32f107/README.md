@@ -1,5 +1,7 @@
 # RelayOnDuration firmware
 
+Active firmware: electrical load cycler with active-low PE1/PE2 relays. See [LOAD_CYCLER.md](LOAD_CYCLER.md) for operation, configuration and validation. Historical baseline notes follow.
+
 فریم‌ور `STM32F107VCT6` برای سامانه پایش و کنترل اتاق آزمون است. توسعه پروژه مرحله‌ای انجام می‌شود و وضعیت عملیاتی هر مرحله در [PROJECT_STATUS.md](../../PROJECT_STATUS.md) ثبت می‌شود. گزارش کامل فارسی در `../../docs/relay_on_duration_report.tex` قرار دارد.
 
 ## وضعیت فعلی — ۱۴۰۵/۰۶/۲۸ (2026-09-19)

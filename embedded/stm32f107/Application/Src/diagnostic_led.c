@@ -18,10 +18,7 @@ static const uint8_t heartbeat_pattern[] = {
 };
 
 /** Default healthy sequence shown after ADE7880 starts successfully. */
-static const uint8_t dance_pattern[] = {
-    LED_1_MASK, 0U, LED_2_MASK, 0U,
-    LED_1_MASK | LED_2_MASK, 0U, 0U, 0U
-};
+static const uint8_t dance_pattern[] = {LED_1_MASK, LED_2_MASK};
 
 /** Fast alternation used while ADE7880 communication is offline. */
 static const uint8_t error_pattern[] = {LED_1_MASK, LED_2_MASK};

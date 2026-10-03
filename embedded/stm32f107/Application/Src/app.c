@@ -3,6 +3,7 @@
  * @brief ADE7880 integration and cooperative application scheduling.
  */
 #include "app.h"
+#include "cycler_config.h"
 
 #include "diagnostic_led.h"
 #include "ds18b20_manager.h"
@@ -12,7 +13,7 @@
 
 #include <string.h>
 
-#define ADE_SPI_TIMEOUT_MS 20U /**< Maximum time for one HAL SPI operation. */
+#define ADE_SPI_TIMEOUT_MS 2U /**< Maximum time for one HAL SPI operation. */
 #define ADE_RESET_TIMEOUT_MS 100U /**< Bounded wait for STATUS1.RSTDONE. */
 #define ADE_SAMPLE_INTERVAL_MS 1000U /**< Normal electrical sample period. */
 #define ADE_RETRY_INTERVAL_MS 2000U /**< Delay between offline retries. */
@@ -280,7 +281,11 @@ static void ade_select(void *context, bool active)
 static void ade_delay(void *context, uint32_t delay_ms)
 {
     (void)context;
-    HAL_Delay(delay_ms);
+    const uint32_t started = HAL_GetTick();
+    while ((uint32_t)(HAL_GetTick() - started) < delay_ms) {
+        DiagnosticLed_Process();
+        UiCounter_Process();
+    }
 }
 
 /** Drive one open-drain 1-Wire GPIO low. */
@@ -398,47 +403,90 @@ static void initialize_temperature_manager(void)
     publish_temperature_values();
 }
 
-/** Try a complete initialization and publish a clear LED/debugger result. */
+/** Cooperative ADE startup: wait deadlines instead of delaying the main loop. */
+typedef enum { ADE_IDLE, ADE_POWER_WAIT, ADE_SS_PULSE, ADE_LOCK,
+               ADE_RESET_REQUEST, ADE_RESET_WAIT, ADE_START, ADE_VERSION } AdeStartup;
+static AdeStartup ade_startup;
+static uint32_t ade_reset_at;
+static uint8_t ade_pulse;
+#define APP_ADE_RESET_BIT (1UL << 7U) /**< CONFIG software reset request. */
+#define APP_ADE_RESET_DONE_BIT (1UL << 15U) /**< STATUS1 reset completion. */
+
+static void ade_failed(ADE7880_Status status)
+{
+    g_app_electrical.last_status=status;
+    g_app_electrical.online=false;
+    ade_startup=ADE_IDLE;
+    ade_select(NULL,false);
+    next_ade_action_ms=HAL_GetTick()+ADE_RETRY_INTERVAL_MS;
+}
+
 static void initialize_ade(void)
 {
-    /* This is the only STM32-specific binding required by the ADE library. */
-    ADE7880_Transport transport = {
-        .context = ade_spi_handle,
-        .write = ade_spi_write,
-        .read = ade_spi_read,
-        .select = ade_select,
-        .delay_ms = ade_delay
-    };
-    uint32_t version = 0U;
-    ADE7880_Status status;
+    ADE7880_Transport transport={.context=ade_spi_handle,.write=ade_spi_write,
+        .read=ade_spi_read,.select=ade_select,.delay_ms=ade_delay};
+    ADE7880_Status status=ADE7880_Init(&ade_device,&transport,ADE_SPI_TIMEOUT_MS);
+    if (status!=ADE7880_STATUS_OK) { ade_failed(status); return; }
+    ade_startup=ADE_POWER_WAIT;
+    next_ade_action_ms=HAL_GetTick()+50U;
+}
 
-    /* Bind callbacks, perform the complete IC startup, then prove one read. */
-    status = ADE7880_Init(&ade_device, &transport, ADE_SPI_TIMEOUT_MS);
-    if (status == ADE7880_STATUS_OK) {
-        status = ADE7880_Begin(&ade_device, ADE_RESET_TIMEOUT_MS);
+static void service_ade_startup(uint32_t now)
+{
+    uint32_t value=0U, flags=0U;
+    ADE7880_Status status=ADE7880_STATUS_OK;
+    next_ade_action_ms=now+1U;
+    switch (ade_startup) {
+    case ADE_POWER_WAIT:
+        ade_pulse=0U; ade_startup=ADE_SS_PULSE; ade_select(NULL,false); break;
+    case ADE_SS_PULSE:
+        ++ade_pulse;
+        ade_select(NULL,(ade_pulse & 1U)!=0U);
+        if (ade_pulse==6U) ade_startup=ADE_LOCK;
+        break;
+    case ADE_LOCK:
+        status=ADE7880_WriteRegisterVerified(&ade_device,ADE7880_REG_CONFIG2,1U,0U);
+        ade_startup=ADE_RESET_REQUEST; break;
+    case ADE_RESET_REQUEST:
+        status=ADE7880_ReadRegister(&ade_device,ADE7880_REG_CONFIG,2U,&value);
+        if (status==ADE7880_STATUS_OK)
+            status=ADE7880_WriteRegister(&ade_device,ADE7880_REG_CONFIG,2U,value|APP_ADE_RESET_BIT);
+        ade_reset_at=now; ade_startup=ADE_RESET_WAIT; break;
+    case ADE_RESET_WAIT:
+        status=ADE7880_ReadRegister(&ade_device,ADE7880_REG_CONFIG,2U,&value);
+        if (status==ADE7880_STATUS_OK)
+            status=ADE7880_ReadRegister(&ade_device,ADE7880_REG_STATUS1,4U,&flags);
+        if (status==ADE7880_STATUS_OK && (value&APP_ADE_RESET_BIT)==0U && (flags&APP_ADE_RESET_DONE_BIT)!=0U) {
+            status=ADE7880_WriteRegister(&ade_device,ADE7880_REG_STATUS1,4U,APP_ADE_RESET_DONE_BIT);
+            ade_startup=ADE_START;
+        } else if ((uint32_t)(now-ade_reset_at)>=ADE_RESET_TIMEOUT_MS)
+            status=ADE7880_STATUS_TIMEOUT;
+        break;
+    case ADE_START:
+        status=ADE7880_StartMeasurements(&ade_device); ade_startup=ADE_VERSION; break;
+    case ADE_VERSION:
+        status=ADE7880_ReadRegister(&ade_device,ADE7880_REG_VERSION,1U,&value);
+        if (status==ADE7880_STATUS_OK) {
+            g_app_electrical.die_version=(uint8_t)value;
+            g_app_electrical.online=true; ade_startup=ADE_IDLE;
+            next_ade_action_ms=now;
+        }
+        break;
+    default: break;
     }
-    if (status == ADE7880_STATUS_OK) {
-        status = ADE7880_ReadRegister(&ade_device, ADE7880_REG_VERSION, 1U,
-                                      &version);
-    }
-
-    g_app_electrical.last_status = status;
-    g_app_electrical.online = (status == ADE7880_STATUS_OK);
-    g_app_electrical.die_version = (uint8_t)version;
-    DiagnosticLed_SetMode(g_app_electrical.online
-                              ? DIAGNOSTIC_LED_MODE_DANCE
-                              : DIAGNOSTIC_LED_MODE_ERROR);
-    next_ade_action_ms = HAL_GetTick() + (g_app_electrical.online
-                              ? ADE_SAMPLE_INTERVAL_MS
-                              : ADE_RETRY_INTERVAL_MS);
+    g_app_electrical.last_status=status;
+    if (status!=ADE7880_STATUS_OK) ade_failed(status);
 }
 
 /** Initialize application state, default three-phase scaling, LEDs, and ADE7880. */
 void App_Init(SPI_HandleTypeDef *ade_spi)
 {
     DiagnosticLed_Init();
-    initialize_temperature_manager();
+    DiagnosticLed_SetMode(DIAGNOSTIC_LED_MODE_DANCE);
     UiCounter_Init();
+    /* Temperature libraries retained, but discovery/Flash writes are disabled
+       in the dedicated electrical load-cycler application. */
+    if (CYCLER_ENABLE_TEMPERATURE) initialize_temperature_manager();
     memset((void *)&g_app_electrical, 0, sizeof(g_app_electrical));
     memset(&measurement_calibration, 0, sizeof(measurement_calibration));
     memset(phase_conversion_enabled, 0, sizeof(phase_conversion_enabled));
@@ -456,7 +504,7 @@ void App_Init(SPI_HandleTypeDef *ade_spi)
 
     if (ade_spi_handle == NULL) {
         g_app_electrical.last_status = ADE7880_STATUS_INVALID_ARGUMENT;
-        DiagnosticLed_SetMode(DIAGNOSTIC_LED_MODE_ERROR);
+        /* LED heartbeat continues even when electrical data is unavailable. */
         return;
     }
     initialize_ade();
@@ -484,6 +532,10 @@ void App_Process(void)
         return;
     }
 
+    if (ade_startup != ADE_IDLE) {
+        service_ade_startup(now);
+        return;
+    }
     if (!g_app_electrical.online) {
         initialize_ade();
         return;
@@ -501,7 +553,7 @@ void App_Process(void)
     } else {
         g_app_electrical.online = false;
         ++g_app_electrical.communication_errors;
-        DiagnosticLed_SetMode(DIAGNOSTIC_LED_MODE_ERROR);
+        /* LED heartbeat continues even when electrical data is unavailable. */
         next_ade_action_ms = now + ADE_RETRY_INTERVAL_MS;
     }
 }
