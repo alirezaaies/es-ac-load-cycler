@@ -38,8 +38,37 @@ Edit Application/Inc/cycler_config.h for timing, precision, displayed phase and 
 
 ## Scheduling and validation
 
-HAL SysTick supplies the millisecond clock. Menus, countdowns, splash pages, LEDs and ADE startup/reset waits use cooperative state machines. SPI still uses short HAL polling transfers with a 2 ms timeout per transaction; the LCD retains hardware-required microsecond delays. This is not a hard real-time/DMA implementation. Relay deadlines start at actual transitions rather than generating catch-up bursts.
+HAL SysTick supplies the millisecond clock. Menus, countdowns, splash pages, LEDs and ADE startup/reset waits use cooperative state machines. SPI still uses short HAL polling transfers with a 20 ms timeout per transaction; the LCD retains hardware-required microsecond delays. This is not a hard real-time/DMA implementation. Relay deadlines start at actual transitions rather than generating catch-up bursts.
 
 Build with platformio run -d embedded/stm32f107. Run python embedded/stm32f107/tests/test_cycler.py with Python unicorn and PlatformIO's ARM GCC installed. The test executes actual ARM-compiled state-machine code and covers buttons, acceleration, wrap, atomic confirmation/cancellation, ten 3-second/2-second cycles, zero durations, tick rollover, LCD bounds, and active-low BSRR outputs.
 
 The user confirmed the previous application works on hardware. The corrected active-low polarity still needs programming onto the board. Existing ADE calibration is preserved.
+
+## Electrical reading diagnostics ? 2026-10-03
+
+The cycler refactor reduced the SPI timeout from the established 20 ms budget to 2 ms. Restore 20 ms so delayed transfers do not unnecessarily reject a complete sample. This is a compatibility correction, not a confirmed diagnosis of the physical board. Startup remains cooperative. Do not replace invalid data with zero or bypass the LCD validity checks.
+
+Run `python embedded/stm32f107/tests/test_electrical.py` for the electrical path regression. It compiles real electrical app code and the portable driver for ARM, with a simulated ADE register model. It verifies startup, a modeled 3 ms transfer, calibration publication, foreground servicing, communication failures and recovery. This model does not prove the board's timing or wiring.
+
+Add these expressions to the debugger Watch window (index 0 = phase A, 1 = B, 2 = C):
+
+| Expression | Meaning |
+| --- | --- |
+| g_app_electrical.voltage_v[0] | RMS voltage, V |
+| g_app_electrical.current_a[0] | RMS current, A |
+| g_app_electrical.active_power_w[0] | Active power, W |
+| g_app_electrical.power_factor_abs[0] | PF magnitude shown on LCD |
+| g_app_electrical.power_factor[0] | Signed PF |
+| g_app_electrical.online | Startup and last sample communication succeeded |
+| g_app_electrical.successful_samples | Must increase once per successful sample |
+| g_app_electrical.updated_at_ms | Timestamp of the latest complete sample |
+| g_app_electrical.last_status | Most recent operation result |
+| g_app_electrical.last_error_status | Most recent error, retained during subsequent successful operations |
+| g_app_electrical.startup_attempts | Initializations including retries |
+| g_app_electrical.startup_errors | Failed startup attempts |
+| g_app_electrical.startup_stage | Current stage |
+| g_app_electrical.failed_startup_stage | Stage of last startup failure |
+| g_app_electrical.communication_errors | Failed sample reads |
+| g_app_electrical.raw.phase[0] | Raw RMS, power and Q1.15 PF registers |
+
+Startup stages: 0 idle; 1 power wait; 2 chip-select pulses; 3 SPI lock; 4 reset request; 5 reset completion; 6 RUN/DSP start; 7 VERSION read. Error codes follow ADE7880_Status in Libraries/ADE7880/Inc/ade7880.h. The LCD requires online communication, a sample younger than 3 seconds, and each quantity's corresponding validity flag. A connected load alone does not make those checks true.

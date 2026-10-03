@@ -13,7 +13,7 @@
 
 #include <string.h>
 
-#define ADE_SPI_TIMEOUT_MS 2U /**< Maximum time for one HAL SPI operation. */
+#define ADE_SPI_TIMEOUT_MS 20U /**< Maximum time for one HAL SPI operation. */
 #define ADE_RESET_TIMEOUT_MS 100U /**< Bounded wait for STATUS1.RSTDONE. */
 #define ADE_SAMPLE_INTERVAL_MS 1000U /**< Normal electrical sample period. */
 #define ADE_RETRY_INTERVAL_MS 2000U /**< Delay between offline retries. */
@@ -416,7 +416,11 @@ static void ade_failed(ADE7880_Status status)
 {
     g_app_electrical.last_status=status;
     g_app_electrical.online=false;
+    g_app_electrical.last_error_status=status;
+    g_app_electrical.failed_startup_stage=(uint8_t)ade_startup;
+    ++g_app_electrical.startup_errors;
     ade_startup=ADE_IDLE;
+    g_app_electrical.startup_stage=(uint8_t)ade_startup;
     ade_select(NULL,false);
     next_ade_action_ms=HAL_GetTick()+ADE_RETRY_INTERVAL_MS;
 }
@@ -425,9 +429,11 @@ static void initialize_ade(void)
 {
     ADE7880_Transport transport={.context=ade_spi_handle,.write=ade_spi_write,
         .read=ade_spi_read,.select=ade_select,.delay_ms=ade_delay};
+    ++g_app_electrical.startup_attempts;
     ADE7880_Status status=ADE7880_Init(&ade_device,&transport,ADE_SPI_TIMEOUT_MS);
     if (status!=ADE7880_STATUS_OK) { ade_failed(status); return; }
     ade_startup=ADE_POWER_WAIT;
+    g_app_electrical.startup_stage=(uint8_t)ade_startup;
     next_ade_action_ms=HAL_GetTick()+50U;
 }
 
@@ -446,24 +452,29 @@ static void service_ade_startup(uint32_t now)
         break;
     case ADE_LOCK:
         status=ADE7880_WriteRegisterVerified(&ade_device,ADE7880_REG_CONFIG2,1U,0U);
-        ade_startup=ADE_RESET_REQUEST; break;
+        if (status==ADE7880_STATUS_OK) ade_startup=ADE_RESET_REQUEST;
+        break;
     case ADE_RESET_REQUEST:
         status=ADE7880_ReadRegister(&ade_device,ADE7880_REG_CONFIG,2U,&value);
         if (status==ADE7880_STATUS_OK)
             status=ADE7880_WriteRegister(&ade_device,ADE7880_REG_CONFIG,2U,value|APP_ADE_RESET_BIT);
-        ade_reset_at=now; ade_startup=ADE_RESET_WAIT; break;
+        ade_reset_at=now;
+        if (status==ADE7880_STATUS_OK) ade_startup=ADE_RESET_WAIT;
+        break;
     case ADE_RESET_WAIT:
         status=ADE7880_ReadRegister(&ade_device,ADE7880_REG_CONFIG,2U,&value);
         if (status==ADE7880_STATUS_OK)
             status=ADE7880_ReadRegister(&ade_device,ADE7880_REG_STATUS1,4U,&flags);
         if (status==ADE7880_STATUS_OK && (value&APP_ADE_RESET_BIT)==0U && (flags&APP_ADE_RESET_DONE_BIT)!=0U) {
             status=ADE7880_WriteRegister(&ade_device,ADE7880_REG_STATUS1,4U,APP_ADE_RESET_DONE_BIT);
-            ade_startup=ADE_START;
+            if (status==ADE7880_STATUS_OK) ade_startup=ADE_START;
         } else if ((uint32_t)(now-ade_reset_at)>=ADE_RESET_TIMEOUT_MS)
             status=ADE7880_STATUS_TIMEOUT;
         break;
     case ADE_START:
-        status=ADE7880_StartMeasurements(&ade_device); ade_startup=ADE_VERSION; break;
+        status=ADE7880_StartMeasurements(&ade_device);
+        if (status==ADE7880_STATUS_OK) ade_startup=ADE_VERSION;
+        break;
     case ADE_VERSION:
         status=ADE7880_ReadRegister(&ade_device,ADE7880_REG_VERSION,1U,&value);
         if (status==ADE7880_STATUS_OK) {
@@ -474,6 +485,7 @@ static void service_ade_startup(uint32_t now)
         break;
     default: break;
     }
+    g_app_electrical.startup_stage=(uint8_t)ade_startup;
     g_app_electrical.last_status=status;
     if (status!=ADE7880_STATUS_OK) ade_failed(status);
 }
@@ -547,12 +559,13 @@ void App_Process(void)
     if (status == ADE7880_STATUS_OK) {
         g_app_electrical.raw = sample;
         update_engineering_values(&sample);
-        g_app_electrical.updated_at_ms = now;
+        g_app_electrical.updated_at_ms = HAL_GetTick();
         ++g_app_electrical.successful_samples;
         next_ade_action_ms = now + ADE_SAMPLE_INTERVAL_MS;
     } else {
         g_app_electrical.online = false;
         ++g_app_electrical.communication_errors;
+        g_app_electrical.last_error_status=status;
         /* LED heartbeat continues even when electrical data is unavailable. */
         next_ade_action_ms = now + ADE_RETRY_INTERVAL_MS;
     }

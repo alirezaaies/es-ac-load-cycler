@@ -637,3 +637,13 @@ Validation: PlatformIO build with -Wall -Wextra -Werror and ARM-emulated state-m
 Repository: resolve the pre-existing .gitignore merge by retaining both sets of ignore rules; preserve the incoming MIT LICENSE. Record that merge separately from the application implementation. No push is performed; the user will push.
 
 Open items: program and verify the corrected relay polarity; decide whether future settings should survive power loss; run the Keil build on the Keil workstation.
+
+## Latest session ? 2026-10-03: electrical readout compatibility and diagnostics
+
+User reports relay cycling/UI work but electrical LCD fields show dashes. The previous refactor changed ADE SPI timeout from 20 ms to 2 ms. Restored the established 20 ms budget while retaining cooperative startup, existing wiring, calibration, active-low outputs, and LCD validity checks. This is a plausible software regression fix; the physical cause remains unconfirmed until the updated firmware is run or debugger values are supplied.
+
+Added startup attempt/error counters, current/failed startup stage and retained last_error_status to g_app_electrical. State transitions now advance only after success so failure diagnostics identify the operation that actually failed. Sample timestamps are taken after the complete read.
+
+Added tests/test_electrical.py exercising real ARM-compiled electrical app code plus the real ADE7880 driver against a simulated SPI/register model, including a 3 ms transfer, calibrated V/A/W/PF publication, read errors, retries and startup failure diagnosis. Existing cycler tests now also check offline/stale dashes and numeric display recovery.
+
+Validation: both ARM tests pass; PlatformIO -Wall -Wextra -Werror build passes (Flash 16184 bytes, RAM 1056 bytes). No physical board is connected to this session. Follow-up: flash this version and verify online=true and successful_samples increases; if fields remain dashes, inspect last_error_status and failed_startup_stage. Watch expressions are documented in LOAD_CYCLER.md. Keil hardware build remains outstanding.

@@ -91,6 +91,12 @@ int test_main(void) {
  compose(screen.rows,100);
  CHECK(memcmp(screen.rows[0],"V230.1P9999T   1",16)==0);
  CHECK(memcmp(screen.rows[1],"A 12.3PF0.98*  3",16)==0);
+ g_app_electrical.online=false; compose(screen.rows,100);
+ CHECK(memcmp(screen.rows[0]+4,"--",2)==0);
+ g_app_electrical.online=true; compose(screen.rows,3100);
+ CHECK(memcmp(screen.rows[0]+4,"--",2)==0);
+ compose(screen.rows,100);
+ CHECK(memcmp(screen.rows[0],"V230.1P9999T   1",16)==0);
  const uint32_t counts[]={9999,10000,99999,100000};
  for (uint32_t n=0;n<4;n+=1) {
   cycle=counts[n]; compose(screen.rows,100);

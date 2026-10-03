@@ -66,6 +66,12 @@ typedef struct {
     uint32_t updated_at_ms; /**< HAL tick of the last complete sample. */
     uint32_t successful_samples; /**< Number of complete snapshots received. */
     uint32_t communication_errors; /**< Failed reads after a valid connection. */
+    uint32_t startup_attempts; /**< Number of initializations including retries. */
+    uint32_t startup_errors; /**< Failed startup attempts, separate from sampling errors. */
+    ADE7880_Status last_error_status; /**< Most recent failure; not erased by successful polling. */
+    uint8_t startup_stage; /**< 0 idle, 1 power wait, 2 SS, 3 lock, 4 reset request,
+                               5 reset wait, 6 RUN, 7 VERSION. */
+    uint8_t failed_startup_stage; /**< Stage of the last failed initialization. */
     ADE7880_MeasurementsRaw raw; /**< Uncalibrated values direct from the IC. */
     float voltage_v[ADE7880_PHASE_COUNT]; /**< RMS voltage in volts when valid. */
     bool voltage_valid[ADE7880_PHASE_COUNT]; /**< True when voltage_v is usable. */
